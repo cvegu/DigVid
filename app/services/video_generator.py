@@ -489,12 +489,12 @@ class VideoGenerator:
             # Cargar y preparar imagen
             img = Image.open(cover_path).convert('RGB')
             img = img.resize((size, size), Image.Resampling.BICUBIC)
-        
+            
             # Crear máscara circular
-            mask = Image.new('L', (size, size), 0)
-            draw = ImageDraw.Draw(mask)
-            margin = 5
-            draw.ellipse([margin, margin, size - margin, size - margin], fill=255)
+        mask = Image.new('L', (size, size), 0)
+        draw = ImageDraw.Draw(mask)
+        margin = 5
+        draw.ellipse([margin, margin, size - margin, size - margin], fill=255)
         
             # Aplicar máscara a la imagen - convertir a RGBA primero
             img_rgba = Image.new('RGBA', (size, size), (0, 0, 0, 0))
@@ -502,7 +502,7 @@ class VideoGenerator:
             img_rgba.putalpha(mask)
             
             # Guardar imagen temporal con alpha usando UUID para evitar conflictos
-            temp_dir = os.path.dirname(cover_path) or 'uploads'
+        temp_dir = os.path.dirname(cover_path) or 'uploads'
             os.makedirs(temp_dir, exist_ok=True)
             temp_filename = f"masked_{uuid.uuid4()}_{os.path.basename(cover_path)}.png"
             temp_path = os.path.join(temp_dir, temp_filename)
@@ -576,26 +576,26 @@ class VideoGenerator:
 
                 return mask_normalized
 
-                # Crear clip de video con rotación
-                img_clip = VideoClip(make_rotating_frame, duration=duration)
-                img_clip = img_clip.set_fps(self.FPS)
+            # Crear clip de video con rotación
+            img_clip = VideoClip(make_rotating_frame, duration=duration)
+            img_clip = img_clip.set_fps(self.FPS)
 
-                # Crear máscara para transparencia
-                mask_clip = VideoClip(make_mask_frame, duration=duration, ismask=True)
-                mask_clip = mask_clip.set_fps(self.FPS)
+            # Crear máscara para transparencia
+            mask_clip = VideoClip(make_mask_frame, duration=duration, ismask=True)
+            mask_clip = mask_clip.set_fps(self.FPS)
 
-                # Aplicar máscara al clip
-                img_clip = img_clip.set_mask(mask_clip)
+            # Aplicar máscara al clip
+            img_clip = img_clip.set_mask(mask_clip)
         
-                # Posicionar en el centro
-                center_x = (self.VIDEO_WIDTH - size) // 2
-                center_y = (self.VIDEO_HEIGHT - size) // 2
-                img_clip = img_clip.set_position((center_x, center_y))
+        # Posicionar en el centro
+            center_x = (self.VIDEO_WIDTH - size) // 2
+            center_y = (self.VIDEO_HEIGHT - size) // 2
+            img_clip = img_clip.set_position((center_x, center_y))
             
-                # Almacenar la ruta temporal para limpieza
-                img_clip._temp_mask_path = temp_path
+            # Almacenar la ruta temporal para limpieza
+            img_clip._temp_mask_path = temp_path
         
-                return img_clip
+        return img_clip
             
         except Exception as e:
             print(f"Error creando vinilo rotatorio: {e}")
@@ -802,8 +802,8 @@ class VideoGenerator:
         # Crear imagen de texto con altura dinámica
         target_height = max(250, total_height)  # Mínimo 250px
         txt_img = Image.new('RGBA', (target_width, target_height), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(txt_img)
-        
+                    draw = ImageDraw.Draw(txt_img)
+                    
         y_offset = 20
         
         # Dibujar artista en BOLD (puede ser múltiples líneas)
@@ -844,27 +844,27 @@ class VideoGenerator:
         if (not artist or not artist.strip()) and (not title or not title.strip()):
             default_text = "Unknown"
             bbox = draw.textbbox((0, 0), default_text, font=font_normal)
-            text_width = bbox[2] - bbox[0]
-            x = (txt_img.width - text_width) // 2
-            for adj in [(-2, -2), (-2, 2), (2, -2), (2, 2)]:
+                        text_width = bbox[2] - bbox[0]
+                        x = (txt_img.width - text_width) // 2
+                        for adj in [(-2, -2), (-2, 2), (2, -2), (2, 2)]:
                 draw.text((x + adj[0], y_offset + adj[1]), default_text, font=font_normal, fill=(0, 0, 0, 200))
             draw.text((x, y_offset), default_text, font=font_normal, fill=(255, 255, 255, 255))
-        
-        # Guardar temporalmente
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-        txt_img.save(temp_file.name, 'PNG')
-        temp_file.close()
-        temp_files.append(temp_file.name)
-        
+                    
+                    # Guardar temporalmente
+                    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+                    txt_img.save(temp_file.name, 'PNG')
+                    temp_file.close()
+                    temp_files.append(temp_file.name)
+                    
         # Crear clip directamente con el tamaño correcto (no usar resize de MoviePy)
-        txt_clip = ImageClip(temp_file.name, duration=duration)
-        txt_clip = txt_clip.set_duration(duration)
-        txt_clip = txt_clip.set_position(('center', VideoGenerator.VIDEO_HEIGHT - 200))
-        
-        # Almacenar archivos temporales como atributo para limpieza posterior
-        txt_clip._temp_files = temp_files
-        
-        return txt_clip
+                    txt_clip = ImageClip(temp_file.name, duration=duration)
+            txt_clip = txt_clip.set_duration(duration)
+            txt_clip = txt_clip.set_position(('center', VideoGenerator.VIDEO_HEIGHT - 200))
+            
+            # Almacenar archivos temporales como atributo para limpieza posterior
+            txt_clip._temp_files = temp_files
+            
+            return txt_clip
     
     def generate_video(
         self,
@@ -901,16 +901,29 @@ class VideoGenerator:
             
             # Crear fondo animado basado en colores de la portada
             background = self.create_animated_background(duration, cover_path=cover_path)
+            if background is None:
+                raise ValueError("Error: No se pudo crear el fondo animado")
             
             # Crear vinilo girando
             vinyl = self.create_rotating_vinyl(cover_path, duration)
+            if vinyl is None:
+                raise ValueError("Error: No se pudo crear el vinilo rotatorio")
             
             # Crear texto
             text_overlay = self.create_text_overlay(artist, title, duration)
+            if text_overlay is None:
+                raise ValueError("Error: No se pudo crear el overlay de texto")
+            
+            # Filtrar clips None antes de compositar
+            clips = [background, vinyl, text_overlay]
+            clips = [c for c in clips if c is not None]
+            
+            if len(clips) == 0:
+                raise ValueError("Error: No hay clips válidos para compositar")
             
             # Compositar todo
             final_video = CompositeVideoClip(
-                [background, vinyl, text_overlay],
+                clips,
                 size=(self.VIDEO_WIDTH, self.VIDEO_HEIGHT)
             )
             

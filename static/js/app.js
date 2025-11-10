@@ -181,10 +181,19 @@ function handleDragLeave(e) {
 
 function handleDrop(e) {
     e.preventDefault();
+    e.stopPropagation();
     audioUploadArea.classList.remove('dragover');
     const files = e.dataTransfer.files;
-    if (files.length > 0 && files[0].type.startsWith('audio/')) {
-        handleAudioFile(files[0]);
+    if (files.length > 0) {
+        const file = files[0];
+        // Verificar si es un archivo de audio por tipo MIME o extensión
+        const isAudio = file.type.startsWith('audio/') || 
+                       /\.(mp3|wav|flac|m4a|ogg|aac)$/i.test(file.name);
+        if (isAudio) {
+            handleAudioFile(file);
+        } else {
+            alert('Por favor, sube un archivo de audio válido (MP3, WAV, FLAC, M4A, OGG, AAC)');
+        }
     }
 }
 
@@ -500,17 +509,28 @@ function handleBatchDragLeave(e) {
 
 function handleBatchDrop(e) {
     e.preventDefault();
+    e.stopPropagation();
     batchUploadArea.classList.remove('dragover');
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('audio/'));
+    const files = Array.from(e.dataTransfer.files).filter(f => {
+        // Verificar por tipo MIME o extensión
+        return f.type.startsWith('audio/') || /\.(mp3|wav|flac|m4a|ogg|aac)$/i.test(f.name);
+    });
     if (files.length > 0) {
         handleBatchAudioFiles(files);
+    } else {
+        alert('Por favor, arrastra archivos de audio válidos (MP3, WAV, FLAC, M4A, OGG, AAC)');
     }
 }
 
 function handleBatchAudioFilesSelect(e) {
-    const files = Array.from(e.target.files).filter(f => f.type.startsWith('audio/'));
+    const files = Array.from(e.target.files).filter(f => {
+        // Verificar por tipo MIME o extensión
+        return f.type.startsWith('audio/') || /\.(mp3|wav|flac|m4a|ogg|aac)$/i.test(f.name);
+    });
     if (files.length > 0) {
         handleBatchAudioFiles(files);
+    } else {
+        alert('Por favor, selecciona archivos de audio válidos (MP3, WAV, FLAC, M4A, OGG, AAC)');
     }
 }
 
