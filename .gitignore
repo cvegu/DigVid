@@ -51,3 +51,7 @@ test_*.mp4
 test_*.jpg
 test_*.png
 
+# Carpeta de archivos de prueba
+TEST FILES/
+TEST FILES/**
+
