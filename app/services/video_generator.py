@@ -844,27 +844,27 @@ class VideoGenerator:
         if (not artist or not artist.strip()) and (not title or not title.strip()):
             default_text = "Unknown"
             bbox = draw.textbbox((0, 0), default_text, font=font_normal)
-                        text_width = bbox[2] - bbox[0]
-                        x = (txt_img.width - text_width) // 2
-                        for adj in [(-2, -2), (-2, 2), (2, -2), (2, 2)]:
+            text_width = bbox[2] - bbox[0]
+            x = (txt_img.width - text_width) // 2
+            for adj in [(-2, -2), (-2, 2), (2, -2), (2, 2)]:
                 draw.text((x + adj[0], y_offset + adj[1]), default_text, font=font_normal, fill=(0, 0, 0, 200))
             draw.text((x, y_offset), default_text, font=font_normal, fill=(255, 255, 255, 255))
-                    
-                    # Guardar temporalmente
-                    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-                    txt_img.save(temp_file.name, 'PNG')
-                    temp_file.close()
-                    temp_files.append(temp_file.name)
-                    
+        
+        # Guardar temporalmente
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+        txt_img.save(temp_file.name, 'PNG')
+        temp_file.close()
+        temp_files.append(temp_file.name)
+        
         # Crear clip directamente con el tamaño correcto (no usar resize de MoviePy)
-                    txt_clip = ImageClip(temp_file.name, duration=duration)
-            txt_clip = txt_clip.set_duration(duration)
-            txt_clip = txt_clip.set_position(('center', VideoGenerator.VIDEO_HEIGHT - 200))
-            
-            # Almacenar archivos temporales como atributo para limpieza posterior
-            txt_clip._temp_files = temp_files
-            
-            return txt_clip
+        txt_clip = ImageClip(temp_file.name, duration=duration)
+        txt_clip = txt_clip.set_duration(duration)
+        txt_clip = txt_clip.set_position(('center', VideoGenerator.VIDEO_HEIGHT - 200))
+        
+        # Almacenar archivos temporales como atributo para limpieza posterior
+        txt_clip._temp_files = temp_files
+        
+        return txt_clip
     
     def generate_video(
         self,
