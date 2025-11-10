@@ -3,11 +3,20 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
+import logging
 from pathlib import Path
 
 from app.routes import video
 
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="DigVid - Generador de Videos Musicales")
+logger.info("🚀 Iniciando aplicación DigVid")
 
 # Configurar CORS
 app.add_middleware(

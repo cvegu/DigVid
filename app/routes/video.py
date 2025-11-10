@@ -212,7 +212,20 @@ async def generate_video(request: GenerateVideoRequest):
         output_path = OUTPUT_DIR / f"{video_id}.mp4"
         
         try:
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            logger.info(f"🎬 Iniciando generación de video")
+            logger.info(f"  - Audio: {audio_path} (existe: {audio_path.exists()})")
+            logger.info(f"  - Cover: {processed_cover_path} (existe: {processed_cover_path.exists()})")
+            logger.info(f"  - Output: {output_path}")
+            logger.info(f"  - Artista: {request.artist}")
+            logger.info(f"  - Título: {request.title}")
+            logger.info(f"  - Tiempo: {request.start_time}s - {request.end_time}s")
+            
             generator = VideoGenerator()
+            logger.info("✅ VideoGenerator creado")
+            
             generator.generate_video(
                 audio_path=str(audio_path),
                 cover_path=str(processed_cover_path),
@@ -223,26 +236,42 @@ async def generate_video(request: GenerateVideoRequest):
                 end_time=request.end_time
             )
             
+            logger.info("✅ generate_video completado")
+            
             # Verificar que el video se generó correctamente
             if not output_path.exists():
+                logger.error(f"❌ El video no se generó: {output_path} no existe")
                 raise HTTPException(status_code=500, detail="El video no se generó correctamente")
             
+            file_size = output_path.stat().st_size
+            logger.info(f"✅ Video generado exitosamente: {output_path} ({file_size} bytes)")
+            
+        except HTTPException:
+            raise
         except Exception as e:
             import traceback
+            import logging
+            logger = logging.getLogger(__name__)
+            
             error_detail = str(e)
-            print(f"Error generando video: {e}")
-            traceback.print_exc()
+            logger.error(f"❌ Error generando video: {e}")
+            logger.error(traceback.format_exc())
+            
             # Limpiar archivos temporales en caso de error
             if processed_cover_path and processed_cover_path.exists():
                 try:
                     os.remove(processed_cover_path)
-                except:
-                    pass
+                    logger.info(f"🗑️ Archivo temporal eliminado: {processed_cover_path}")
+                except Exception as cleanup_error:
+                    logger.warning(f"⚠️ No se pudo eliminar archivo temporal: {cleanup_error}")
+            
             if output_path and output_path.exists():
                 try:
                     os.remove(output_path)
-                except:
-                    pass
+                    logger.info(f"🗑️ Video parcial eliminado: {output_path}")
+                except Exception as cleanup_error:
+                    logger.warning(f"⚠️ No se pudo eliminar video parcial: {cleanup_error}")
+            
             raise HTTPException(status_code=500, detail=f"Error generando video: {error_detail}")
         finally:
             # Limpiar portada procesada temporal
@@ -330,27 +359,49 @@ async def get_cover(cover_file_id: str):
 @router.get("/audio/{audio_file_id}")
 async def get_audio(audio_file_id: str):
     """Obtiene un archivo de audio subido para reproducción."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
         # Decodificar el nombre del archivo en caso de que tenga caracteres especiales
         from urllib.parse import unquote
+        original_file_id = audio_file_id
         audio_file_id = unquote(audio_file_id)
         
+        logger.info(f"🔍 DEBUG get_audio - Solicitud de audio:")
+        logger.info(f"  - ID original: {original_file_id}")
+        logger.info(f"  - ID decodificado: {audio_file_id}")
+        logger.info(f"  - Upload directory: {UPLOAD_DIR}")
+        
         audio_path = UPLOAD_DIR / audio_file_id
+        logger.info(f"  - Ruta completa: {audio_path}")
+        logger.info(f"  - Existe: {audio_path.exists()}")
+        
         if not audio_path.exists():
-            # Listar archivos disponibles para debugging (solo en desarrollo)
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Audio file not found: {audio_file_id}")
-            logger.error(f"Upload directory: {UPLOAD_DIR}")
-            logger.error(f"Full path: {audio_path}")
+            # Listar archivos disponibles para debugging
+            logger.error(f"❌ Audio file not found: {audio_file_id}")
             
             # Buscar archivos similares
             if UPLOAD_DIR.exists():
-                files = list(UPLOAD_DIR.glob(f"*{os.path.splitext(audio_file_id)[1]}"))
-                if files:
-                    logger.error(f"Found similar files: {[f.name for f in files[:5]]}")
+                all_files = list(UPLOAD_DIR.glob("*"))
+                logger.error(f"📁 Archivos en uploads ({len(all_files)}): {[f.name for f in all_files[:10]]}")
+                
+                # Buscar por extensión
+                ext = os.path.splitext(audio_file_id)[1]
+                if ext:
+                    similar_files = list(UPLOAD_DIR.glob(f"*{ext}"))
+                    if similar_files:
+                        logger.error(f"📁 Archivos con extensión {ext}: {[f.name for f in similar_files[:5]]}")
             
             raise HTTPException(status_code=404, detail=f"Archivo de audio no encontrado: {audio_file_id}")
+        
+        # Verificar que es un archivo válido
+        if not audio_path.is_file():
+            logger.error(f"❌ No es un archivo: {audio_path}")
+            raise HTTPException(status_code=404, detail=f"Ruta no es un archivo: {audio_file_id}")
+        
+        file_size = audio_path.stat().st_size
+        logger.info(f"✅ Audio encontrado: {audio_file_id} ({file_size} bytes)")
         
         # Determinar media type
         ext = os.path.splitext(audio_file_id)[1].lower()
@@ -363,19 +414,25 @@ async def get_audio(audio_file_id: str):
             '.aac': 'audio/aac'
         }
         media_type = media_types.get(ext, 'audio/mpeg')
+        logger.info(f"✅ Media type: {media_type}")
         
         return FileResponse(
             path=str(audio_path),
             media_type=media_type,
-            filename=audio_file_id
+            filename=audio_file_id,
+            headers={
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "public, max-age=3600"
+            }
         )
     except HTTPException:
         raise
     except Exception as e:
         import traceback
+        logger = logging.getLogger(__name__)
         error_detail = str(e)
-        print(f"Error sirviendo audio: {e}")
-        traceback.print_exc()
+        logger.error(f"❌ Error sirviendo audio: {e}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error sirviendo audio: {error_detail}")
 
 

@@ -891,51 +891,83 @@ class VideoGenerator:
         Returns:
             Ruta del video generado
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         try:
+            logger.info("🎬 VideoGenerator.generate_video - Iniciando")
+            logger.info(f"  - audio_path: {audio_path} (existe: {os.path.exists(audio_path)})")
+            logger.info(f"  - cover_path: {cover_path} (existe: {os.path.exists(cover_path)})")
+            logger.info(f"  - output_path: {output_path}")
+            logger.info(f"  - artist: {artist}, title: {title}")
+            logger.info(f"  - start_time: {start_time}, end_time: {end_time}")
+            
             # Calcular duración
             duration = end_time - start_time
+            logger.info(f"  - duration: {duration}s")
             
             # Cargar y recortar audio
+            logger.info("📁 Cargando archivo de audio...")
+            if not os.path.exists(audio_path):
+                raise FileNotFoundError(f"Archivo de audio no encontrado: {audio_path}")
+            
             audio_clip = AudioFileClip(audio_path)
+            logger.info(f"✅ Audio cargado, duración original: {audio_clip.duration}s")
+            
             audio_clip = audio_clip.subclip(start_time, end_time)
+            logger.info(f"✅ Audio recortado a {duration}s")
             
             # Crear fondo animado basado en colores de la portada
+            logger.info("🎨 Creando fondo animado...")
             background = self.create_animated_background(duration, cover_path=cover_path)
             if background is None:
                 raise ValueError("Error: No se pudo crear el fondo animado")
+            logger.info("✅ Fondo animado creado")
             
             # Crear vinilo girando
+            logger.info("🎴 Creando vinilo rotatorio...")
             vinyl = self.create_rotating_vinyl(cover_path, duration)
             if vinyl is None:
                 raise ValueError("Error: No se pudo crear el vinilo rotatorio")
+            logger.info("✅ Vinilo rotatorio creado")
             
             # Crear texto
+            logger.info("📝 Creando overlay de texto...")
             text_overlay = self.create_text_overlay(artist, title, duration)
             if text_overlay is None:
                 raise ValueError("Error: No se pudo crear el overlay de texto")
+            logger.info("✅ Overlay de texto creado")
             
             # Filtrar clips None antes de compositar
             clips = [background, vinyl, text_overlay]
             clips = [c for c in clips if c is not None]
+            logger.info(f"✅ Clips preparados: {len(clips)} clips válidos")
             
             if len(clips) == 0:
                 raise ValueError("Error: No hay clips válidos para compositar")
             
             # Compositar todo
+            logger.info("🎞️ Compositando video...")
             final_video = CompositeVideoClip(
                 clips,
                 size=(self.VIDEO_WIDTH, self.VIDEO_HEIGHT)
             )
+            logger.info("✅ Video compositado")
             
             # Agregar audio
+            logger.info("🔊 Agregando audio al video...")
             final_video = final_video.set_audio(audio_clip)
             final_video = final_video.set_duration(duration)
             final_video = final_video.set_fps(self.FPS)
+            logger.info("✅ Audio agregado")
             
             # Asegurar que el directorio de salida existe
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            output_dir = os.path.dirname(output_path)
+            os.makedirs(output_dir, exist_ok=True)
+            logger.info(f"✅ Directorio de salida creado: {output_dir}")
             
             # Exportar con mejor calidad y anti-aliasing
+            logger.info(f"💾 Exportando video a: {output_path}")
             final_video.write_videofile(
                 output_path,
                 codec='libx264',

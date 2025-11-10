@@ -184,15 +184,33 @@ function handleDrop(e) {
     e.stopPropagation();
     audioUploadArea.classList.remove('dragover');
     const files = e.dataTransfer.files;
+    console.log('🔍 DEBUG handleDrop - Archivos recibidos:', files.length);
+    
     if (files.length > 0) {
         const file = files[0];
+        console.log('🔍 DEBUG - Archivo:', {
+            name: file.name,
+            type: file.type,
+            size: file.size
+        });
+        
         // Verificar si es un archivo de audio por tipo MIME o extensión
-        const isAudio = file.type.startsWith('audio/') || 
-                       /\.(mp3|wav|flac|m4a|ogg|aac)$/i.test(file.name);
+        const hasAudioMime = file.type && file.type.startsWith('audio/');
+        const hasAudioExtension = /\.(mp3|wav|flac|m4a|ogg|aac)$/i.test(file.name);
+        const isAudio = hasAudioMime || hasAudioExtension;
+        
+        console.log('🔍 DEBUG - Validación:', {
+            hasAudioMime,
+            hasAudioExtension,
+            isAudio
+        });
+        
         if (isAudio) {
+            console.log('✅ Archivo de audio válido, procesando...');
             handleAudioFile(file);
         } else {
-            alert('Por favor, sube un archivo de audio válido (MP3, WAV, FLAC, M4A, OGG, AAC)');
+            console.warn('❌ Archivo no válido:', file.name, 'Tipo:', file.type);
+            alert(`Por favor, sube un archivo de audio válido (MP3, WAV, FLAC, M4A, OGG, AAC)\n\nArchivo: ${file.name}\nTipo detectado: ${file.type || 'desconocido'}`);
         }
     }
 }
@@ -379,6 +397,8 @@ function formatTime(seconds) {
 
 // Generar video - Modo Individual
 async function generateVideo() {
+    console.log('🔍 DEBUG generateVideo - Iniciando generación de video');
+    
     try {
         if (!appState.audioFileId) {
             throw new Error('Por favor sube un archivo de audio');
@@ -388,6 +408,16 @@ async function generateVideo() {
         const title = titleInput.value.trim() || 'Unknown Title';
         const startTime = Math.round(parseFloat(startTimeInput.value) || 0); // Sin decimales
         const endTime = Math.round(parseFloat(endTimeInput.value) || 0); // Sin decimales
+        
+        console.log('🔍 DEBUG - Parámetros de generación:', {
+            audioFileId: appState.audioFileId,
+            artist,
+            title,
+            startTime,
+            endTime,
+            coverFileId: appState.coverFileId,
+            audioDuration: appState.audioDuration
+        });
         
         if (endTime <= startTime) {
             throw new Error('El tiempo final debe ser mayor que el tiempo inicial');
@@ -401,27 +431,39 @@ async function generateVideo() {
         generateBtn.innerHTML = '<span class="spinner"></span> Generando video...';
         showStatus(generateStatus, 'Generando video. Esto puede tomar unos minutos...', 'info');
         
+        const requestBody = {
+            audio_file_id: appState.audioFileId,
+            artist: artist,
+            title: title,
+            start_time: startTime,
+            end_time: endTime,
+            cover_file_id: appState.coverFileId
+        };
+        
+        console.log('🔍 DEBUG - Enviando solicitud:', requestBody);
+        
         const response = await fetch('/api/generate', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                audio_file_id: appState.audioFileId,
-                artist: artist,
-                title: title,
-                start_time: startTime,
-                end_time: endTime,
-                cover_file_id: appState.coverFileId
-            })
+            body: JSON.stringify(requestBody)
+        });
+        
+        console.log('🔍 DEBUG - Respuesta recibida:', {
+            status: response.status,
+            statusText: response.statusText,
+            ok: response.ok
         });
         
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Error generando video');
+            const errorData = await response.json().catch(() => ({ detail: 'Error desconocido' }));
+            console.error('❌ ERROR en respuesta:', errorData);
+            throw new Error(errorData.detail || `Error ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
+        console.log('✅ DEBUG - Video generado exitosamente:', data);
         
         showStatus(generateStatus, '¡Video generado exitosamente!', 'success');
         downloadLink.href = `/api/download/${data.video_id}`;
@@ -434,10 +476,11 @@ async function generateVideo() {
         generateBtn.innerHTML = '🎬 Generar Video';
         
     } catch (error) {
+        console.error('❌ ERROR generando video:', error);
+        console.error('Stack trace:', error.stack);
         showStatus(generateStatus, `Error: ${error.message}`, 'error');
         generateBtn.disabled = false;
         generateBtn.innerHTML = '🎬 Generar Video';
-        console.error(error);
     }
 }
 
@@ -1083,18 +1126,29 @@ function handleWaveformMouseUp(e) {
 
 // Configurar reproductor de audio
 function setupAudioPlayer(audioFileId) {
+    console.log('🔍 DEBUG setupAudioPlayer - audioFileId:', audioFileId);
+    
     // Crear o obtener elemento de audio
     let audioElement = document.getElementById('audioPlayer');
     if (!audioElement) {
+        console.log('🔍 DEBUG - Creando nuevo elemento de audio');
         audioElement = document.createElement('audio');
         audioElement.id = 'audioPlayer';
         audioElement.style.display = 'none';
         document.body.appendChild(audioElement);
+    } else {
+        console.log('🔍 DEBUG - Usando elemento de audio existente');
+        // Remover listeners antiguos para evitar duplicados
+        const newAudioElement = audioElement.cloneNode();
+        audioElement.parentNode.replaceChild(newAudioElement, audioElement);
+        audioElement = newAudioElement;
     }
     
     // Configurar fuente del audio - codificar el nombre del archivo por si tiene caracteres especiales
     const encodedFileId = encodeURIComponent(audioFileId);
-    audioElement.src = `/api/audio/${encodedFileId}`;
+    const audioUrl = `/api/audio/${encodedFileId}`;
+    console.log('🔍 DEBUG - Configurando audio URL:', audioUrl);
+    audioElement.src = audioUrl;
     audioElement.preload = 'metadata';
     
     // Guardar referencia en el estado
@@ -1102,16 +1156,39 @@ function setupAudioPlayer(audioFileId) {
     
     // Event listeners para actualizar UI
     audioElement.addEventListener('loadedmetadata', () => {
+        console.log('✅ DEBUG - Audio metadata cargada, duración:', audioElement.duration);
         if (totalTimeSpan) {
             totalTimeSpan.textContent = formatTime(audioElement.duration);
         }
     });
     
+    audioElement.addEventListener('loadeddata', () => {
+        console.log('✅ DEBUG - Audio data cargado');
+    });
+    
+    audioElement.addEventListener('canplay', () => {
+        console.log('✅ DEBUG - Audio puede reproducirse');
+    });
+    
     audioElement.addEventListener('error', (e) => {
-        console.error('Error cargando audio:', e);
+        console.error('❌ ERROR cargando audio:', e);
         console.error('Audio src:', audioElement.src);
         console.error('Audio error code:', audioElement.error?.code);
         console.error('Audio error message:', audioElement.error?.message);
+        console.error('Audio networkState:', audioElement.networkState);
+        console.error('Audio readyState:', audioElement.readyState);
+        
+        // Mostrar error al usuario
+        if (audioElement.error) {
+            let errorMsg = 'Error desconocido';
+            switch(audioElement.error.code) {
+                case 1: errorMsg = 'MEDIA_ERR_ABORTED - El usuario canceló la carga'; break;
+                case 2: errorMsg = 'MEDIA_ERR_NETWORK - Error de red'; break;
+                case 3: errorMsg = 'MEDIA_ERR_DECODE - Error al decodificar el audio'; break;
+                case 4: errorMsg = 'MEDIA_ERR_SRC_NOT_SUPPORTED - Formato no soportado'; break;
+            }
+            alert(`Error cargando audio: ${errorMsg}\n\nArchivo: ${audioFileId}\nURL: ${audioElement.src}`);
+        }
     });
     
     audioElement.addEventListener('timeupdate', () => {
@@ -1164,8 +1241,11 @@ function setupAudioPlayer(audioFileId) {
 
 // Toggle reproducción de audio
 function toggleAudioPlayback() {
+    console.log('🔍 DEBUG toggleAudioPlayback - Iniciando');
+    
     if (!appState.audioPlayer) {
-        console.error('Reproductor de audio no está configurado');
+        console.error('❌ ERROR - Reproductor de audio no está configurado');
+        alert('El reproductor de audio no está configurado. Por favor, sube un archivo de audio primero.');
         return;
     }
     
@@ -1173,53 +1253,62 @@ function toggleAudioPlayback() {
     const startTime = Math.round(parseFloat(startTimeInput.value) || 0); // Sin decimales
     const endTime = Math.round(parseFloat(endTimeInput.value) || 30); // Sin decimales
     
+    console.log('🔍 DEBUG - Tiempos:', { startTime, endTime, currentTime: audio.currentTime });
+    console.log('🔍 DEBUG - Estado audio:', {
+        paused: audio.paused,
+        readyState: audio.readyState,
+        networkState: audio.networkState,
+        src: audio.src,
+        duration: audio.duration
+    });
+    
     // Validar que los tiempos sean válidos
     if (endTime <= startTime) {
-        console.warn('Tiempos inválidos: endTime debe ser mayor que startTime');
+        console.warn('❌ Tiempos inválidos: endTime debe ser mayor que startTime');
+        alert(`Tiempos inválidos: El tiempo final (${endTime}s) debe ser mayor que el tiempo inicial (${startTime}s)`);
         return;
     }
     
     if (audio.paused) {
-        // Asegurarse de que el audio está listo para reproducir
-        if (audio.readyState >= 2) { // HAVE_CURRENT_DATA o superior
-            // Siempre iniciar desde el tiempo de inicio seleccionado
-            audio.currentTime = startTime;
-            
-            // Intentar reproducir
-            const playPromise = audio.play();
-            
-            if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    // Reproducción iniciada correctamente
-                    console.log(`Reproduciendo desde ${startTime}s hasta ${endTime}s`);
-                }).catch(error => {
-                    console.error('Error reproduciendo audio:', error);
-                    console.error('Audio src:', audio.src);
-                    console.error('Audio file ID:', appState.audioFileId);
-                    console.error('Audio readyState:', audio.readyState);
-                    console.error('Audio networkState:', audio.networkState);
-                    
-                    // Mostrar error más específico
-                    const errorMsg = error.message || 'Error desconocido';
-                    alert(`Error reproduciendo audio: ${errorMsg}\n\nArchivo: ${appState.audioFileId}\n\nAsegúrate de que el archivo sea válido y que el servidor esté funcionando correctamente.`);
-                });
-            }
+        console.log('▶️ Reproduciendo audio...');
+        
+        // Siempre iniciar desde el tiempo de inicio seleccionado
+        audio.currentTime = startTime;
+        console.log('🔍 DEBUG - currentTime establecido a:', startTime);
+        
+        // Intentar reproducir
+        const playPromise = audio.play();
+        
+        if (playPromise !== undefined) {
+            playPromise.then(() => {
+                // Reproducción iniciada correctamente
+                console.log(`✅ Reproduciendo desde ${startTime}s hasta ${endTime}s`);
+            }).catch(error => {
+                console.error('❌ ERROR reproduciendo audio:', error);
+                console.error('Audio src:', audio.src);
+                console.error('Audio file ID:', appState.audioFileId);
+                console.error('Audio readyState:', audio.readyState);
+                console.error('Audio networkState:', audio.networkState);
+                console.error('Audio error:', audio.error);
+                
+                // Mostrar error más específico
+                let errorMsg = error.message || 'Error desconocido';
+                if (audio.error) {
+                    switch(audio.error.code) {
+                        case 1: errorMsg = 'MEDIA_ERR_ABORTED'; break;
+                        case 2: errorMsg = 'MEDIA_ERR_NETWORK - Verifica tu conexión'; break;
+                        case 3: errorMsg = 'MEDIA_ERR_DECODE - Formato no soportado'; break;
+                        case 4: errorMsg = 'MEDIA_ERR_SRC_NOT_SUPPORTED - URL no válida'; break;
+                    }
+                }
+                alert(`Error reproduciendo audio: ${errorMsg}\n\nArchivo: ${appState.audioFileId}\nURL: ${audio.src}\n\nAsegúrate de que el archivo sea válido y que el servidor esté funcionando correctamente.`);
+            });
         } else {
-            // El audio aún no está listo, esperar a que cargue
-            console.log('Audio no está listo, esperando...');
-            audio.addEventListener('canplay', function onCanPlay() {
-                audio.removeEventListener('canplay', onCanPlay);
-                audio.currentTime = startTime;
-                audio.play().catch(error => {
-                    console.error('Error reproduciendo audio después de canplay:', error);
-                });
-            }, { once: true });
-            
-            // Forzar carga del audio
-            audio.load();
+            console.warn('⚠️ play() no retornó una promesa');
         }
     } else {
         // Pausar reproducción
+        console.log('⏸️ Pausando audio...');
         audio.pause();
     }
 }
