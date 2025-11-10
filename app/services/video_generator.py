@@ -586,16 +586,16 @@ class VideoGenerator:
 
             # Aplicar máscara al clip
             img_clip = img_clip.set_mask(mask_clip)
-        
-        # Posicionar en el centro
+            
+            # Posicionar en el centro
             center_x = (self.VIDEO_WIDTH - size) // 2
             center_y = (self.VIDEO_HEIGHT - size) // 2
             img_clip = img_clip.set_position((center_x, center_y))
             
             # Almacenar la ruta temporal para limpieza
             img_clip._temp_mask_path = temp_path
-        
-        return img_clip
+            
+            return img_clip
             
         except Exception as e:
             print(f"Error creando vinilo rotatorio: {e}")
