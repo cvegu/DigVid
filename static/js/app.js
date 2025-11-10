@@ -336,11 +336,22 @@ function updateVideoDuration() {
     videoDurationSpan.textContent = formatTime(duration);
     
     // Si el reproductor de audio está activo, verificar que esté dentro del rango
-    if (appState.audioPlayer && !appState.audioPlayer.paused) {
+    if (appState.audioPlayer) {
         const currentTime = appState.audioPlayer.currentTime;
-        // Si está fuera del rango seleccionado, ajustar o pausar
+        const wasPlaying = !appState.audioPlayer.paused;
+        
+        // Si está fuera del rango seleccionado, ajustar
         if (currentTime < startTime || currentTime >= endTime) {
+            // Si estaba reproduciendo, pausar primero para evitar conflictos
+            if (wasPlaying) {
+                appState.audioPlayer.pause();
+            }
+            // Ajustar al nuevo tiempo de inicio
             appState.audioPlayer.currentTime = startTime;
+            // Actualizar el botón de play/pause
+            if (playPauseBtn) {
+                playPauseBtn.textContent = '▶️ Reproducir';
+            }
         }
     }
     
@@ -974,8 +985,8 @@ function handleWaveformMouseDown(e) {
     const percent = Math.max(0, Math.min(100, (x / rect.width) * 100));
     const time = (percent / 100) * appState.audioDuration;
     
-    const startTime = parseFloat(startTimeInput.value) || 0;
-    const endTime = parseFloat(endTimeInput.value) || 30;
+    const startTime = Math.round(parseFloat(startTimeInput.value) || 0); // Sin decimales
+    const endTime = Math.round(parseFloat(endTimeInput.value) || 30); // Sin decimales
     
     // Determinar qué se está arrastrando
     const selectionLeftPercent = (startTime / appState.audioDuration) * 100;
@@ -1002,7 +1013,7 @@ function handleWaveformMouseDown(e) {
     } else {
         // Mover la selección al hacer clic (centrar en el punto clickeado)
         const duration = endTime - startTime;
-        const newStart = Math.max(0, Math.min(time - duration / 2, appState.audioDuration - duration));
+        const newStart = Math.max(0, Math.min(Math.round(time - duration / 2), appState.audioDuration - duration));
         const newEnd = Math.min(newStart + duration, appState.audioDuration);
         updateWaveformSelection(newStart, newEnd);
     }
@@ -1017,18 +1028,26 @@ function handleWaveformMouseMove(e) {
     const percent = (x / rect.width) * 100;
     const time = Math.max(0, Math.min((percent / 100) * appState.audioDuration, appState.audioDuration));
     
-    let startTime = parseFloat(startTimeInput.value) || 0;
-    let endTime = parseFloat(endTimeInput.value) || 30;
+    let startTime = Math.round(parseFloat(startTimeInput.value) || 0); // Sin decimales
+    let endTime = Math.round(parseFloat(endTimeInput.value) || 30); // Sin decimales
     const duration = endTime - startTime;
     
+    // Si el audio está reproduciendo y cambiamos el fragmento, pausarlo temporalmente
+    if (appState.audioPlayer && !appState.audioPlayer.paused) {
+        appState.audioPlayer.pause();
+        if (playPauseBtn) {
+            playPauseBtn.textContent = '▶️ Reproducir';
+        }
+    }
+    
     if (appState.dragType === 'left') {
-        startTime = Math.max(0, Math.min(time, endTime - 0.5));
+        startTime = Math.max(0, Math.min(Math.round(time), endTime - 1)); // Mínimo 1 segundo de diferencia
         updateWaveformSelection(startTime, endTime);
     } else if (appState.dragType === 'right') {
-        endTime = Math.max(startTime + 0.5, Math.min(time, appState.audioDuration));
+        endTime = Math.max(startTime + 1, Math.min(Math.round(time), appState.audioDuration)); // Mínimo 1 segundo de diferencia
         updateWaveformSelection(startTime, endTime);
     } else if (appState.dragType === 'selection') {
-        const newStart = Math.max(0, Math.min(time - appState.dragOffset, appState.audioDuration - duration));
+        const newStart = Math.max(0, Math.min(Math.round(time - appState.dragOffset), appState.audioDuration - duration));
         const newEnd = Math.min(newStart + duration, appState.audioDuration);
         updateWaveformSelection(newStart, newEnd);
     }
@@ -1083,18 +1102,20 @@ function setupAudioPlayer(audioFileId) {
         // Obtener los tiempos seleccionados (sin decimales)
         const startTime = Math.round(parseFloat(startTimeInput.value) || 0);
         const endTime = Math.round(parseFloat(endTimeInput.value) || 30);
+        const currentTime = audioElement.currentTime;
         
         // Si el audio alcanza o supera el tiempo final seleccionado, pausar y reiniciar
-        if (audioElement.currentTime >= endTime) {
+        if (currentTime >= endTime) {
             audioElement.pause();
             audioElement.currentTime = startTime;
             if (playPauseBtn) {
                 playPauseBtn.textContent = '▶️ Reproducir';
             }
+            return; // Salir para evitar conflictos
         }
         
-        // Si el audio está antes del tiempo de inicio, saltar al inicio
-        if (audioElement.currentTime < startTime) {
+        // Si el audio está antes del tiempo de inicio (solo si está reproduciendo)
+        if (currentTime < startTime && !audioElement.paused) {
             audioElement.currentTime = startTime;
         }
     });
@@ -1132,17 +1153,51 @@ function toggleAudioPlayback() {
     const startTime = Math.round(parseFloat(startTimeInput.value) || 0); // Sin decimales
     const endTime = Math.round(parseFloat(endTimeInput.value) || 30); // Sin decimales
     
+    // Validar que los tiempos sean válidos
+    if (endTime <= startTime) {
+        console.warn('Tiempos inválidos: endTime debe ser mayor que startTime');
+        return;
+    }
+    
     if (audio.paused) {
-        // Siempre iniciar desde el tiempo de inicio seleccionado
-        audio.currentTime = startTime;
-        audio.play().catch(error => {
-            console.error('Error reproduciendo audio:', error);
-            console.error('Audio src:', audio.src);
-            console.error('Audio file ID:', appState.audioFileId);
-            // Mostrar error más específico
-            const errorMsg = error.message || 'Error desconocido';
-            alert(`Error reproduciendo audio: ${errorMsg}\n\nArchivo: ${appState.audioFileId}\n\nAsegúrate de que el archivo sea válido y que el servidor esté funcionando correctamente.`);
-        });
+        // Asegurarse de que el audio está listo para reproducir
+        if (audio.readyState >= 2) { // HAVE_CURRENT_DATA o superior
+            // Siempre iniciar desde el tiempo de inicio seleccionado
+            audio.currentTime = startTime;
+            
+            // Intentar reproducir
+            const playPromise = audio.play();
+            
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    // Reproducción iniciada correctamente
+                    console.log(`Reproduciendo desde ${startTime}s hasta ${endTime}s`);
+                }).catch(error => {
+                    console.error('Error reproduciendo audio:', error);
+                    console.error('Audio src:', audio.src);
+                    console.error('Audio file ID:', appState.audioFileId);
+                    console.error('Audio readyState:', audio.readyState);
+                    console.error('Audio networkState:', audio.networkState);
+                    
+                    // Mostrar error más específico
+                    const errorMsg = error.message || 'Error desconocido';
+                    alert(`Error reproduciendo audio: ${errorMsg}\n\nArchivo: ${appState.audioFileId}\n\nAsegúrate de que el archivo sea válido y que el servidor esté funcionando correctamente.`);
+                });
+            }
+        } else {
+            // El audio aún no está listo, esperar a que cargue
+            console.log('Audio no está listo, esperando...');
+            audio.addEventListener('canplay', function onCanPlay() {
+                audio.removeEventListener('canplay', onCanPlay);
+                audio.currentTime = startTime;
+                audio.play().catch(error => {
+                    console.error('Error reproduciendo audio después de canplay:', error);
+                });
+            }, { once: true });
+            
+            // Forzar carga del audio
+            audio.load();
+        }
     } else {
         // Pausar reproducción
         audio.pause();
