@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DigVid - Generador de Videos Musicales</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎵 DigVid</h1>
+            <p class="subtitle">Generador de Videos Musicales para Instagram</p>
+        </header>
+
+        <main>
+            <!-- Modo selector -->
+            <section class="step" id="modeSelector">
+                <h2>Modo de Trabajo</h2>
+                <div class="mode-buttons">
+                    <button type="button" id="singleModeBtn" class="btn btn-primary btn-mode active">
+                        🎵 Modo Individual
+                    </button>
+                    <button type="button" id="batchModeBtn" class="btn btn-primary btn-mode">
+                        📦 Modo Lote (hasta 10 canciones)
+                    </button>
+                </div>
+            </section>
+
+            <!-- MODO INDIVIDUAL -->
+            <div id="singleMode">
+            <!-- Paso 1: Upload de Audio -->
+            <section class="step" id="step1">
+                <h2>1. Subir Audio</h2>
+                <div class="upload-area" id="audioUploadArea">
+                    <input type="file" id="audioFile" accept="audio/*" style="display: none;">
+                    <div class="upload-content">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <p>Arrastra un archivo de audio aquí o haz clic para seleccionar</p>
+                        <p class="file-info">Formatos soportados: MP3, WAV, FLAC, M4A, OGG</p>
+                    </div>
+                </div>
+                <div id="audioInfo" class="file-info-display" style="display: none;">
+                    <p><strong>Archivo:</strong> <span id="audioFilename"></span></p>
+                </div>
+            </section>
+
+            <!-- Paso 2: Metadata y Portada -->
+            <section class="step" id="step2" style="display: none;">
+                <h2>2. Información de la Canción</h2>
+                
+                <div class="form-group">
+                    <label for="artist">Artista</label>
+                    <input type="text" id="artist" placeholder="Nombre del artista">
+                </div>
+
+                <div class="form-group">
+                    <label for="title">Título</label>
+                    <input type="text" id="title" placeholder="Título de la canción">
+                </div>
+
+                <div class="form-group">
+                    <label>Portada del Álbum</label>
+                    <div class="cover-section">
+                        <div id="coverPreview" class="cover-preview">
+                            <p>No hay portada disponible</p>
+                        </div>
+                        <div class="cover-actions">
+                            <input type="file" id="coverFile" accept="image/*" style="display: none;">
+                            <button type="button" id="uploadCoverBtn" class="btn btn-secondary">
+                                Subir Portada
+                            </button>
+                            <button type="button" id="removeCoverBtn" class="btn btn-secondary" style="display: none;">
+                                Quitar Portada
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Paso 3: Selección de Segmento -->
+            <section class="step" id="step3" style="display: none;">
+                <h2>3. Seleccionar Segmento</h2>
+                
+                <div class="form-group">
+                    <label>Duración del audio: <span id="audioDuration">0:00</span></label>
+                        
+                        <!-- Waveform y selector visual -->
+                        <div class="waveform-container">
+                            <div id="waveformContainer" class="waveform-canvas">
+                                <canvas id="waveform" width="800" height="120"></canvas>
+                                <div class="waveform-selection" id="waveformSelection" style="display: none;">
+                                    <div class="selection-handle selection-handle-left" id="selectionHandleLeft"></div>
+                                    <div class="selection-handle selection-handle-right" id="selectionHandleRight"></div>
+                                    <div class="selection-info" id="selectionInfo">30s</div>
+                                </div>
+                            </div>
+                            <div class="waveform-controls">
+                                <button type="button" id="playPauseBtn" class="btn btn-secondary btn-small">
+                                    ▶️ Reproducir
+                                </button>
+                                <span id="currentTime" class="time-display">0:00</span>
+                                <span class="time-separator">/</span>
+                                <span id="totalTime" class="time-display">0:00</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Inputs numéricos (ocultos pero sincronizados) -->
+                        <div class="time-inputs" style="margin-top: 15px;">
+                        <div class="time-input-group">
+                            <label for="startTime">Desde (segundos)</label>
+                                <input type="number" id="startTime" min="0" step="1" value="0">
+                            </div>
+                            <div class="time-input-group">
+                                <label for="endTime">Hasta (segundos)</label>
+                                <input type="number" id="endTime" min="0" step="1" value="30">
+                            </div>
+                        </div>
+                        <div class="duration-info">
+                            <p>Duración del video: <span id="videoDuration">0:30</span></p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Paso 4: Generar Video -->
+            <section class="step" id="step4" style="display: none;">
+                <h2>4. Generar Video</h2>
+                <button type="button" id="generateBtn" class="btn btn-primary btn-large">
+                    🎬 Generar Video
+                </button>
+                <div id="generateStatus" class="status-message" style="display: none;"></div>
+            </section>
+
+            <!-- Resultado -->
+            <section class="step" id="step5" style="display: none;">
+                <h2>✅ Video Generado</h2>
+                <div class="result-section">
+                    <p>Tu video está listo para descargar.</p>
+                    <a id="downloadLink" href="#" class="btn btn-primary btn-large" download>
+                        ⬇️ Descargar Video
+                    </a>
+                    <button type="button" id="newVideoBtn" class="btn btn-secondary">
+                        Crear Nuevo Video
+                    </button>
+                </div>
+            </section>
+            </div>
+
+            <!-- MODO BATCH -->
+            <div id="batchMode" style="display: none;">
+                <!-- Paso 1: Upload múltiple -->
+                <section class="step" id="batchStep1">
+                    <h2>1. Subir Canciones (máximo 10)</h2>
+                    <div class="upload-area" id="batchUploadArea">
+                        <input type="file" id="batchAudioFiles" accept="audio/*" multiple style="display: none;">
+                        <div class="upload-content">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            <p>Arrastra múltiples archivos de audio aquí o haz clic para seleccionar</p>
+                            <p class="file-info">Máximo 10 archivos. Formatos: MP3, WAV, FLAC, M4A, OGG</p>
+                        </div>
+                    </div>
+                    <div id="batchFilesList" class="batch-files-list" style="display: none;"></div>
+                </section>
+
+                <!-- Paso 2: Configurar canciones -->
+                <section class="step" id="batchStep2" style="display: none;">
+                    <h2>2. Configurar Canciones</h2>
+                    <div class="form-group">
+                        <label for="folderName">Nombre de la Carpeta de Exportación</label>
+                        <input type="text" id="folderName" placeholder="Mi Playlist - Enero 2024" value="">
+                    </div>
+                    <div class="form-group">
+                        <label>Configuración por Defecto (aplicará a todas las canciones)</label>
+                        <div class="time-inputs">
+                            <div class="time-input-group">
+                                <label for="batchStartTime">Desde (segundos)</label>
+                                <input type="number" id="batchStartTime" min="0" step="1" value="0">
+                            </div>
+                            <div class="time-input-group">
+                                <label for="batchEndTime">Hasta (segundos)</label>
+                                <input type="number" id="batchEndTime" min="0" step="1" value="30">
+                            </div>
+                        </div>
+                    </div>
+                    <div id="batchSongsConfig" class="batch-songs-config"></div>
+                </section>
+
+                <!-- Paso 3: Generar lote -->
+                <section class="step" id="batchStep3" style="display: none;">
+                    <h2>3. Generar Videos</h2>
+                    <button type="button" id="batchGenerateBtn" class="btn btn-primary btn-large">
+                        🎬 Generar Todos los Videos
+                    </button>
+                    <div id="batchProgress" class="batch-progress" style="display: none;">
+                        <div class="progress-bar">
+                            <div id="progressBarFill" class="progress-bar-fill"></div>
+                        </div>
+                        <p id="progressText">Preparando...</p>
+                        <div id="batchStatus" class="batch-status"></div>
+                    </div>
+                </section>
+
+                <!-- Resultado batch -->
+                <section class="step" id="batchStep4" style="display: none;">
+                    <h2>✅ Videos Generados</h2>
+                    <div class="result-section">
+                        <p id="batchResultText"></p>
+                        <div id="batchResults" class="batch-results"></div>
+                        <a id="batchDownloadZip" href="#" class="btn btn-primary btn-large" style="display: none;">
+                            ⬇️ Descargar Todo como ZIP
+                        </a>
+                        <button type="button" id="newBatchBtn" class="btn btn-secondary">
+                            Crear Nuevo Lote
+                        </button>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

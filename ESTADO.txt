@@ -1,0 +1,41 @@
+✅ DIGVID - ESTADO DEL SERVIDOR
+================================
+
+🟢 SERVIDOR EN EJECUCIÓN
+
+El servidor está corriendo y listo para usar.
+
+📍 URL: http://localhost:8000
+
+📋 VERIFICACIONES COMPLETADAS:
+✅ Python 3.11.9 instalado
+✅ FFmpeg instalado y funcionando
+✅ Entorno virtual creado
+✅ Todas las dependencias instaladas
+✅ Servidor iniciado en puerto 8000
+✅ Página web accesible
+✅ Archivos estáticos (CSS/JS) funcionando
+✅ API respondiendo correctamente
+
+🚀 CÓMO USAR:
+1. Abre tu navegador en: http://localhost:8000
+2. Sube un archivo de audio
+3. Edita la metadata si es necesario
+4. Selecciona el segmento de audio
+5. Genera el video
+6. Descarga el resultado
+
+📝 PARA REINICIAR EL SERVIDOR:
+- En macOS/Linux: ./start.sh
+- En Windows: start.bat
+- Manualmente: 
+  source venv/bin/activate
+  uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+🛑 PARA DETENER EL SERVIDOR:
+- Presiona Ctrl+C en la terminal donde está corriendo
+- O ejecuta: lsof -ti:8000 | xargs kill
+
+================================
+Fecha: $(date)
+
