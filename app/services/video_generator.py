@@ -802,8 +802,8 @@ class VideoGenerator:
         # Crear imagen de texto con altura dinámica
         target_height = max(250, total_height)  # Mínimo 250px
         txt_img = Image.new('RGBA', (target_width, target_height), (0, 0, 0, 0))
-                    draw = ImageDraw.Draw(txt_img)
-                    
+        draw = ImageDraw.Draw(txt_img)
+        
         y_offset = 20
         
         # Dibujar artista en BOLD (puede ser múltiples líneas)
