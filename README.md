@@ -1,26 +1,44 @@
-# DigVid - Generador de Videos Musicales para Instagram
+# 🎵 DigVid - Generador de Videos Musicales para Instagram
 
 Aplicación web para generar videos de música estilo vinilo para Instagram (1080x1350px) con fondo animado, portada girando y metadata del audio.
 
-## Características
+## ✨ Características
 
-- Subida de archivos de audio (MP3, WAV, FLAC, M4A, OGG)
-- Extracción automática de metadata (artista, título, portada)
-- Edición manual de información y portada
-- Selección de segmento de audio (segundo inicio - segundo fin)
-- Generación de video con fondo animado tipo "liquid glass"
-- Portada girando como vinilo
-- Texto con artista y título
-- Export optimizado para Instagram feed (1080x1350px)
+- **Modo Individual**: Genera un video a la vez
+- **Modo Batch**: Procesa hasta 10 canciones simultáneamente
+- **Extracción automática de metadata**: Artista, título, portada desde archivos de audio
+- **Selección visual de segmentos**: Waveform interactivo para elegir qué parte de la canción usar
+- **Fondo animado dinámico**: Colores extraídos de la portada del álbum
+- **Reproductor de audio integrado**: Para previsualizar el segmento seleccionado
+- **Export optimizado**: Videos en formato vertical Instagram (1080x1350px)
 
-## Instalación
+## 🚀 Inicio Rápido
 
-1. Instalar dependencias:
+### Prerrequisitos
+
+- Python 3.11+
+- FFmpeg instalado en el sistema
+
+### Instalación
+
+1. **Clonar el repositorio**:
+```bash
+git clone https://github.com/cvegu/DigVid.git
+cd DigVid
+```
+
+2. **Crear entorno virtual**:
+```bash
+python -m venv venv
+source venv/bin/activate  # En Windows: venv\Scripts\activate
+```
+
+3. **Instalar dependencias**:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Asegurarse de tener FFmpeg instalado (requerido por MoviePy):
+4. **Instalar FFmpeg**:
 ```bash
 # macOS
 brew install ffmpeg
@@ -32,65 +50,97 @@ sudo apt-get install ffmpeg
 # Descargar desde https://ffmpeg.org/download.html
 ```
 
-## Uso
-
-1. Instalar dependencias (recomendado usar un entorno virtual):
+5. **Iniciar el servidor**:
 ```bash
-python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
-pip install -r requirements.txt
+./start.sh  # macOS/Linux
+# o
+start.bat   # Windows
+# o manualmente
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-2. Iniciar el servidor:
-```bash
-uvicorn app.main:app --reload
+6. **Abrir en el navegador**:
+```
+http://localhost:8000
 ```
 
-3. Abrir navegador en: http://localhost:8000
+## 📖 Uso
 
-4. Usar la aplicación:
-   - Subir un archivo de audio (drag & drop o click para seleccionar)
-   - La aplicación extraerá automáticamente metadata y portada si están disponibles
-   - Editar manualmente artista, título y portada si es necesario
-   - Seleccionar el segmento de audio (segundos de inicio y fin)
-   - Generar el video
-   - Descargar el video generado
+### Modo Individual
 
-## Características Técnicas
+1. **Subir archivo de audio**: Arrastra un archivo MP3, WAV, FLAC, etc. a la zona de upload
+2. **Editar metadata**: La aplicación extraerá automáticamente artista, título y portada. Puedes editarlos manualmente.
+3. **Seleccionar segmento**: Usa el waveform visual para elegir qué parte de la canción usar (por defecto 30 segundos)
+4. **Reproducir preview**: Haz click en "Reproducir" para escuchar el segmento seleccionado
+5. **Generar video**: Haz click en "Generar Video" y espera a que se complete (puede tardar varios minutos)
+6. **Descargar**: Descarga el video generado
 
-- **Rotación del vinilo**: 33⅓ RPM (velocidad estándar de LP)
+### Modo Batch
+
+1. **Subir múltiples archivos**: Arrastra hasta 10 archivos de audio
+2. **Configurar tiempos por defecto**: Establece tiempos de inicio y fin para todas las canciones
+3. **Personalizar canciones**: Edita metadata individual de cada canción si es necesario
+4. **Generar videos**: Haz click en "Generar Videos" y espera a que se procesen todos
+5. **Descargar**: Descarga videos individuales o un ZIP con todos los videos y una lista de canciones
+
+## 🛠️ Características Técnicas
+
 - **Formato de video**: MP4 (H.264) en 1080x1350px (formato vertical Instagram)
-- **Fondo animado**: Gradiente animado tipo "liquid glass" con efecto fluido
-- **Soporte de formatos de audio**: MP3, WAV, FLAC, M4A, OGG
-- **Soporte de formatos de imagen**: JPG, PNG, GIF, WEBP
+- **Calidad**: CRF 18 (alta calidad), preset slow
+- **Audio**: AAC 192kbps
+- **FPS**: 30
+- **Rotación del vinilo**: 33⅓ RPM (velocidad estándar de LP)
+- **Fondo animado**: Gradiente animado tipo "liquid glass" con colores de la portada
+- **Formatos de audio soportados**: MP3, WAV, FLAC, M4A, OGG, AAC
+- **Formatos de imagen soportados**: JPG, PNG, GIF, WEBP
 
-## Notas
-
-- La generación de video puede tardar varios minutos dependiendo de la duración del segmento
-- Se requiere FFmpeg instalado en el sistema para la generación de video
-- Los archivos subidos se guardan temporalmente en la carpeta `uploads/`
-- Los videos generados se guardan en la carpeta `outputs/`
-
-## Estructura del Proyecto
+## 📁 Estructura del Proyecto
 
 ```
 DigVid/
 ├── app/
-│   ├── main.py              # FastAPI app principal
+│   ├── main.py                    # FastAPI app principal
 │   ├── routes/
-│   │   └── video.py         # Endpoints para generación de video
+│   │   └── video.py               # Endpoints de la API
 │   ├── services/
-│   │   ├── audio_processor.py   # Extracción de metadata
-│   │   ├── video_generator.py   # Generación de video con MoviePy
-│   │   └── image_processor.py   # Rotación de portada
+│   │   ├── audio_processor.py     # Extracción de metadata y waveform
+│   │   ├── video_generator.py     # Generación de video (core)
+│   │   └── image_processor.py     # Procesamiento de portadas
 │   └── templates/
-│       └── index.html       # Interfaz web
+│       └── index.html             # Interfaz web
 ├── static/
 │   ├── css/
-│   │   └── style.css        # Estilos de la interfaz
+│   │   └── style.css              # Estilos (tema oscuro minimalista)
 │   └── js/
-│       └── app.js           # Lógica del frontend
-├── uploads/                 # Archivos temporales subidos
-└── outputs/                 # Videos generados
+│       └── app.js                 # Lógica del frontend
+├── fonts/                         # Fuentes Helvetica (fallback)
+├── uploads/                       # Archivos temporales subidos
+├── outputs/                       # Videos generados
+├── requirements.txt               # Dependencias Python
+├── README.md                      # Este archivo
+└── ARCHITECTURE.md                # Documentación técnica completa
 ```
+
+## 📚 Documentación
+
+Para información detallada sobre la arquitectura, componentes, flujo de datos, problemas conocidos y debugging, consulta [ARCHITECTURE.md](./ARCHITECTURE.md).
+
+## ⚠️ Notas Importantes
+
+- **Tiempo de generación**: La generación de video puede tardar varios minutos dependiendo de la duración del segmento
+- **FFmpeg requerido**: Se requiere FFmpeg instalado en el sistema para la generación de video
+- **Archivos temporales**: Los archivos subidos se guardan en `uploads/` y los videos generados en `outputs/`
+- **Límite de batch**: El modo batch procesa hasta 10 canciones a la vez
+
+## 🐛 Problemas Conocidos
+
+Consulta [ARCHITECTURE.md](./ARCHITECTURE.md#-problemas-conocidos-y-debugging) para una lista completa de problemas conocidos y soluciones.
+
+## 📝 Licencia
+
+Este proyecto es de código abierto. Consulta el archivo LICENSE para más detalles.
+
+## 🤝 Contribuciones
+
+Las contribuciones son bienvenidas. Por favor, abre un issue o pull request en el repositorio.
 

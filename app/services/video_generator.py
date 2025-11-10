@@ -968,21 +968,27 @@ class VideoGenerator:
             
             # Exportar con mejor calidad y anti-aliasing
             logger.info(f"💾 Exportando video a: {output_path}")
+            # Nota: No usar bitrate y CRF al mismo tiempo. CRF es mejor para calidad constante.
+            # Tampoco usar -vf scale porque el video ya tiene el tamaño correcto (1080x1350)
             final_video.write_videofile(
                 output_path,
                 codec='libx264',
                 audio_codec='aac',
                 fps=self.FPS,
-                bitrate='12000k',  # Mayor bitrate para mejor calidad
                 preset='slow',     # Preset más lento = mejor calidad
                 threads=4,
                 logger=None,  # Reducir output
                 ffmpeg_params=[
-                    '-crf', '18',           # Calidad constante alta (18 es muy buena calidad)
+                    '-crf', '18',           # Calidad constante alta (18 es muy buena calidad, menor = mejor)
                     '-pix_fmt', 'yuv420p',  # Formato de píxeles compatible
-                    '-movflags', '+faststart',  # Optimización para streaming
-                    '-vf', 'scale=1080:1350:flags=lanczos'  # Escalado con Lanczos para mejor anti-aliasing
-                ]
+                    '-movflags', '+faststart',  # Optimización para streaming (metadata al inicio)
+                    '-profile:v', 'high',   # Perfil de codificación alta
+                    '-level', '4.0',        # Nivel H.264
+                    '-bf', '2',             # B-frames para mejor compresión
+                    '-b_strategy', '1',     # Estrategia de B-frames
+                    '-aac_coder', 'twoloop' # Mejor calidad de audio AAC
+                ],
+                audio_bitrate='192k'  # Bitrate de audio
             )
             
             # Limpiar clips

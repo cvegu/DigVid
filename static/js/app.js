@@ -195,11 +195,17 @@ function handleDrop(e) {
         });
         
         // Verificar si es un archivo de audio por tipo MIME o extensión
-        const hasAudioMime = file.type && file.type.startsWith('audio/');
-        const hasAudioExtension = /\.(mp3|wav|flac|m4a|ogg|aac)$/i.test(file.name);
+        // Algunos sistemas no detectan correctamente el tipo MIME, así que confiamos más en la extensión
+        const fileExtension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0] || '';
+        const validExtensions = ['.mp3', '.wav', '.flac', '.m4a', '.ogg', '.aac', '.mp4']; // mp4 para algunos archivos de audio
+        const hasAudioMime = file.type && (file.type.startsWith('audio/') || file.type.startsWith('video/'));
+        const hasAudioExtension = validExtensions.includes(fileExtension);
         const isAudio = hasAudioMime || hasAudioExtension;
         
         console.log('🔍 DEBUG - Validación:', {
+            fileName: file.name,
+            fileType: file.type || '(vacío)',
+            fileExtension: fileExtension || '(sin extensión)',
             hasAudioMime,
             hasAudioExtension,
             isAudio
@@ -209,8 +215,11 @@ function handleDrop(e) {
             console.log('✅ Archivo de audio válido, procesando...');
             handleAudioFile(file);
         } else {
-            console.warn('❌ Archivo no válido:', file.name, 'Tipo:', file.type);
-            alert(`Por favor, sube un archivo de audio válido (MP3, WAV, FLAC, M4A, OGG, AAC)\n\nArchivo: ${file.name}\nTipo detectado: ${file.type || 'desconocido'}`);
+            console.warn('❌ Archivo no válido:', file.name, 'Tipo:', file.type || 'desconocido', 'Extensión:', fileExtension || 'sin extensión');
+            // Solo mostrar alerta si realmente no es un archivo de audio válido
+            if (fileExtension && !validExtensions.includes(fileExtension)) {
+                alert(`Por favor, sube un archivo de audio válido (MP3, WAV, FLAC, M4A, OGG, AAC)\n\nArchivo: ${file.name}\nExtensión detectada: ${fileExtension || 'ninguna'}\nTipo MIME: ${file.type || 'desconocido'}`);
+            }
         }
     }
 }
@@ -554,10 +563,15 @@ function handleBatchDrop(e) {
     e.preventDefault();
     e.stopPropagation();
     batchUploadArea.classList.remove('dragover');
+    
+    const validExtensions = ['.mp3', '.wav', '.flac', '.m4a', '.ogg', '.aac', '.mp4'];
     const files = Array.from(e.dataTransfer.files).filter(f => {
-        // Verificar por tipo MIME o extensión
-        return f.type.startsWith('audio/') || /\.(mp3|wav|flac|m4a|ogg|aac)$/i.test(f.name);
+        const fileExtension = f.name.toLowerCase().match(/\.[^.]+$/)?.[0] || '';
+        const hasAudioMime = f.type && (f.type.startsWith('audio/') || f.type.startsWith('video/'));
+        const hasAudioExtension = validExtensions.includes(fileExtension);
+        return hasAudioMime || hasAudioExtension;
     });
+    
     if (files.length > 0) {
         handleBatchAudioFiles(files);
     } else {
@@ -566,10 +580,14 @@ function handleBatchDrop(e) {
 }
 
 function handleBatchAudioFilesSelect(e) {
+    const validExtensions = ['.mp3', '.wav', '.flac', '.m4a', '.ogg', '.aac', '.mp4'];
     const files = Array.from(e.target.files).filter(f => {
-        // Verificar por tipo MIME o extensión
-        return f.type.startsWith('audio/') || /\.(mp3|wav|flac|m4a|ogg|aac)$/i.test(f.name);
+        const fileExtension = f.name.toLowerCase().match(/\.[^.]+$/)?.[0] || '';
+        const hasAudioMime = f.type && (f.type.startsWith('audio/') || f.type.startsWith('video/'));
+        const hasAudioExtension = validExtensions.includes(fileExtension);
+        return hasAudioMime || hasAudioExtension;
     });
+    
     if (files.length > 0) {
         handleBatchAudioFiles(files);
     } else {
