@@ -330,8 +330,8 @@ function removeCover() {
 
 // Actualizar duración del video
 function updateVideoDuration() {
-    const startTime = parseFloat(startTimeInput.value) || 0;
-    const endTime = parseFloat(endTimeInput.value) || 0;
+    const startTime = Math.round(parseFloat(startTimeInput.value) || 0); // Sin decimales
+    const endTime = Math.round(parseFloat(endTimeInput.value) || 0); // Sin decimales
     const duration = Math.max(0, endTime - startTime);
     videoDurationSpan.textContent = formatTime(duration);
     
