@@ -491,18 +491,18 @@ class VideoGenerator:
             img = img.resize((size, size), Image.Resampling.BICUBIC)
             
             # Crear máscara circular
-        mask = Image.new('L', (size, size), 0)
-        draw = ImageDraw.Draw(mask)
-        margin = 5
-        draw.ellipse([margin, margin, size - margin, size - margin], fill=255)
-        
+            mask = Image.new('L', (size, size), 0)
+            draw = ImageDraw.Draw(mask)
+            margin = 5
+            draw.ellipse([margin, margin, size - margin, size - margin], fill=255)
+            
             # Aplicar máscara a la imagen - convertir a RGBA primero
             img_rgba = Image.new('RGBA', (size, size), (0, 0, 0, 0))
             img_rgba.paste(img, (0, 0))
             img_rgba.putalpha(mask)
             
             # Guardar imagen temporal con alpha usando UUID para evitar conflictos
-        temp_dir = os.path.dirname(cover_path) or 'uploads'
+            temp_dir = os.path.dirname(cover_path) or 'uploads'
             os.makedirs(temp_dir, exist_ok=True)
             temp_filename = f"masked_{uuid.uuid4()}_{os.path.basename(cover_path)}.png"
             temp_path = os.path.join(temp_dir, temp_filename)
