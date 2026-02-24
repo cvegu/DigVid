@@ -1,57 +1,6 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Archivos temporales
+TEST FILES/*
+!TEST FILES/.gitkeep
 uploads/*
 !uploads/.gitkeep
 outputs/*
 !outputs/.gitkeep
-*.tmp
-*.temp
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-
-# Archivos de prueba
-test_*.mp3
-test_*.mp4
-test_*.jpg
-test_*.png
-
-# Carpeta de archivos de prueba
-TEST FILES/
-TEST FILES/**
-

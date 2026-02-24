@@ -1,0 +1,14 @@
+{
+  "os": "Darwin 25.2.0",
+  "kernel": "Darwin Kernel Version 25.2.0: Tue Nov 18 21:09:55 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T8103",
+  "machine": "arm64",
+  "python_version": "3.11.9",
+  "cpu_physical_cores": 8,
+  "cpu_logical_cores": 8,
+  "ram_total_gb": 8.0,
+  "cpu_model": "Apple M1",
+  "ffmpeg_version": "ffmpeg version 7.1.1 Copyright (c) 2000-2025 the FFmpeg developers",
+  "gpu_name": "not available (no NVIDIA GPU detected)",
+  "disk_total_gb": 460.4,
+  "disk_free_gb": 38.6
+}

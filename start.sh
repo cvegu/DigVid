@@ -1,13 +1,24 @@
 #!/bin/bash
+# Sonivo - Start Script
 
-# Script para iniciar el servidor DigVid
+# Activate virtual environment if it exists
+if [ -d "venv" ]; then
+    source venv/bin/activate
+fi
 
-cd "$(dirname "$0")"
+# Create necessary directories
+mkdir -p uploads outputs
 
-# Activar entorno virtual
-source venv/bin/activate
+# Check for FFmpeg
+if ! command -v ffmpeg &> /dev/null; then
+    echo "❌ FFmpeg is not installed. Please install it first:"
+    echo "   macOS: brew install ffmpeg"
+    echo "   Ubuntu: sudo apt-get install ffmpeg"
+    exit 1
+fi
 
-# Iniciar servidor
-# Si necesitas reload durante desarrollo, usa: --reload --reload-exclude "venv/*" --reload-exclude ".venv/*"
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+echo "🎵 Starting Sonivo server..."
+echo "   Open http://localhost:8000 in your browser"
+echo ""
 
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

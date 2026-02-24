@@ -1,1343 +1,918 @@
-// Estado de la aplicación
-const appState = {
-    audioFileId: null,
-    coverFileId: null,
-    audioDuration: 0,
-    metadata: {
-        artist: '',
-        title: ''
+/**
+ * Sonivo — Frontend Application Logic
+ * Handles file upload, metadata editing, waveform visualization, 
+ * audio preview, and video generation for both single and batch modes.
+ */
+
+// ============================================================
+// State
+// ============================================================
+
+const state = {
+    mode: 'single', // 'single' | 'batch'
+    single: {
+        fileId: null,
+        filePath: null,
+        duration: 0,
+        startSec: 0,
+        endSec: 30,
+        coverPath: null,
+        customCoverFile: null,
+        peaks: [],
+        audioContext: null,
+        audioBuffer: null,
+        sourceNode: null,
+        isPlaying: false,
     },
-    mode: 'single', // 'single' o 'batch'
-    batchSongs: [],  // Array de canciones para modo batch
-    waveform: null,  // Datos del waveform
-    waveformCanvas: null,
-    waveformCtx: null,
-    isDragging: false,
-    dragType: null, // 'left', 'right', 'selection'
-    audioPlayer: null
+    batch: {
+        tracks: [], // { fileId, filePath, artist, title, album, duration, coverUrl, coverPath, startSec, endSec, peaks }
+        playingIdx: -1, // index of currently playing track, -1 if none
+        playCheckInterval: null,
+    },
 };
 
-// Elementos del DOM - Modo Individual
-const audioUploadArea = document.getElementById('audioUploadArea');
-const audioFileInput = document.getElementById('audioFile');
-const audioInfo = document.getElementById('audioInfo');
-const audioFilename = document.getElementById('audioFilename');
-const audioDurationSpan = document.getElementById('audioDuration');
+// ============================================================
+// DOM References
+// ============================================================
 
-const step1 = document.getElementById('step1');
-const step2 = document.getElementById('step2');
-const step3 = document.getElementById('step3');
-const step4 = document.getElementById('step4');
-const step5 = document.getElementById('step5');
+const $ = (id) => document.getElementById(id);
 
-const artistInput = document.getElementById('artist');
-const titleInput = document.getElementById('title');
-const coverPreview = document.getElementById('coverPreview');
-const coverFileInput = document.getElementById('coverFile');
-const uploadCoverBtn = document.getElementById('uploadCoverBtn');
-const removeCoverBtn = document.getElementById('removeCoverBtn');
+// Tabs
+const tabSingle = $('tab-single');
+const tabBatch = $('tab-batch');
+const singleMode = $('single-mode');
+const batchMode = $('batch-mode');
 
-const startTimeInput = document.getElementById('startTime');
-const endTimeInput = document.getElementById('endTime');
-const videoDurationSpan = document.getElementById('videoDuration');
+// Single mode elements
+const dropZoneSingle = $('drop-zone-single');
+const fileInputSingle = $('file-input-single');
+const uploadZoneSingle = $('upload-zone-single');
+const editorSingle = $('editor-single');
+const coverImgSingle = $('cover-img-single');
+const coverInputSingle = $('cover-input-single');
+const titleSingle = $('title-single');
+const artistSingle = $('artist-single');
+const albumSingle = $('album-single');
+const durationSingle = $('duration-single');
+const waveformCanvas = $('waveform-canvas-single');
+const waveformContainer = $('waveform-container-single');
+const selectionOverlay = $('selection-overlay-single');
+const handleLeft = $('handle-left-single');
+const handleRight = $('handle-right-single');
+const startTimeInput = $('start-time-single');
+const endTimeInput = $('end-time-single');
+const segmentDuration = $('segment-duration-single');
+const playBtn = $('play-btn-single');
+const audioPlayer = $('audio-player-single');
+const generateBtnSingle = $('generate-btn-single');
+const progressSingle = $('progress-single');
+const progressTextSingle = $('progress-text-single');
+const progressFillSingle = $('progress-fill-single');
+const resultSingle = $('result-single');
+const resultVideoSingle = $('result-video-single');
+const downloadLinkSingle = $('download-link-single');
+const newVideoBtnSingle = $('new-video-btn-single');
 
-// Elementos del waveform
-const waveformCanvas = document.getElementById('waveform');
-const waveformContainer = document.getElementById('waveformContainer');
-const waveformSelection = document.getElementById('waveformSelection');
-const selectionHandleLeft = document.getElementById('selectionHandleLeft');
-const selectionHandleRight = document.getElementById('selectionHandleRight');
-const selectionInfo = document.getElementById('selectionInfo');
-const playPauseBtn = document.getElementById('playPauseBtn');
-const currentTimeSpan = document.getElementById('currentTime');
-const totalTimeSpan = document.getElementById('totalTime');
+// Batch mode elements
+const dropZoneBatch = $('drop-zone-batch');
+const fileInputBatch = $('file-input-batch');
+const uploadZoneBatch = $('upload-zone-batch');
+const batchTracksContainer = $('batch-tracks');
+const batchActions = $('batch-actions');
+const generateBtnBatch = $('generate-btn-batch');
+const progressBatch = $('progress-batch');
+const batchProgressTitle = $('batch-progress-title');
+const batchProgressText = $('batch-progress-text');
+const progressFillBatch = $('progress-fill-batch');
+const resultBatch = $('result-batch');
+const batchResultsList = $('batch-results-list');
+const downloadZipBatch = $('download-zip-batch');
+const newBatchBtn = $('new-batch-btn');
 
-const generateBtn = document.getElementById('generateBtn');
-const generateStatus = document.getElementById('generateStatus');
-const downloadLink = document.getElementById('downloadLink');
-const newVideoBtn = document.getElementById('newVideoBtn');
 
-// Elementos del DOM - Modo Batch
-const singleMode = document.getElementById('singleMode');
-const batchMode = document.getElementById('batchMode');
-const singleModeBtn = document.getElementById('singleModeBtn');
-const batchModeBtn = document.getElementById('batchModeBtn');
+// ============================================================
+// Tab Switching
+// ============================================================
 
-const batchUploadArea = document.getElementById('batchUploadArea');
-const batchAudioFiles = document.getElementById('batchAudioFiles');
-const batchFilesList = document.getElementById('batchFilesList');
-const batchStep1 = document.getElementById('batchStep1');
-const batchStep2 = document.getElementById('batchStep2');
-const batchStep3 = document.getElementById('batchStep3');
-const batchStep4 = document.getElementById('batchStep4');
-const folderNameInput = document.getElementById('folderName');
-const batchStartTimeInput = document.getElementById('batchStartTime');
-const batchEndTimeInput = document.getElementById('batchEndTime');
-const batchSongsConfig = document.getElementById('batchSongsConfig');
-const batchGenerateBtn = document.getElementById('batchGenerateBtn');
-const batchProgress = document.getElementById('batchProgress');
-const progressBarFill = document.getElementById('progressBarFill');
-const progressText = document.getElementById('progressText');
-const batchStatus = document.getElementById('batchStatus');
-const batchResults = document.getElementById('batchResults');
-const batchResultText = document.getElementById('batchResultText');
-const batchDownloadZip = document.getElementById('batchDownloadZip');
-const newBatchBtn = document.getElementById('newBatchBtn');
+tabSingle.addEventListener('click', () => switchMode('single'));
+tabBatch.addEventListener('click', () => switchMode('batch'));
 
-// Event Listeners - Modo selector
-singleModeBtn.addEventListener('click', () => switchMode('single'));
-batchModeBtn.addEventListener('click', () => switchMode('batch'));
-
-// Event Listeners - Modo Individual
-audioUploadArea.addEventListener('click', () => audioFileInput.click());
-audioUploadArea.addEventListener('dragover', handleDragOver);
-audioUploadArea.addEventListener('dragleave', handleDragLeave);
-audioUploadArea.addEventListener('drop', handleDrop);
-audioFileInput.addEventListener('change', handleAudioFileSelect);
-
-uploadCoverBtn.addEventListener('click', () => coverFileInput.click());
-coverFileInput.addEventListener('change', handleCoverFileSelect);
-removeCoverBtn.addEventListener('click', removeCover);
-
-startTimeInput.addEventListener('input', updateVideoDuration);
-endTimeInput.addEventListener('input', updateVideoDuration);
-
-// Event listeners para waveform
-if (waveformCanvas) {
-    const ctx = waveformCanvas.getContext('2d');
-    appState.waveformCanvas = waveformCanvas;
-    appState.waveformCtx = ctx;
-    
-    // Event listeners para selección visual (en el contenedor para mejor detección)
-    if (waveformContainer) {
-        waveformContainer.addEventListener('mousedown', handleWaveformMouseDown);
-        document.addEventListener('mousemove', handleWaveformMouseMove);
-        document.addEventListener('mouseup', handleWaveformMouseUp);
-    }
-    
-    if (selectionHandleLeft) {
-        selectionHandleLeft.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
-            appState.isDragging = true;
-            appState.dragType = 'left';
-        });
-    }
-    
-    if (selectionHandleRight) {
-        selectionHandleRight.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
-            appState.isDragging = true;
-            appState.dragType = 'right';
-        });
-    }
-}
-
-if (playPauseBtn) {
-    playPauseBtn.addEventListener('click', toggleAudioPlayback);
-}
-
-generateBtn.addEventListener('click', generateVideo);
-newVideoBtn.addEventListener('click', resetApp);
-
-// Event Listeners - Modo Batch
-batchUploadArea.addEventListener('click', () => batchAudioFiles.click());
-batchUploadArea.addEventListener('dragover', handleBatchDragOver);
-batchUploadArea.addEventListener('dragleave', handleBatchDragLeave);
-batchUploadArea.addEventListener('drop', handleBatchDrop);
-batchAudioFiles.addEventListener('change', handleBatchAudioFilesSelect);
-
-batchGenerateBtn.addEventListener('click', generateBatchVideos);
-newBatchBtn.addEventListener('click', resetBatchApp);
-
-// Cambiar modo
 function switchMode(mode) {
-    appState.mode = mode;
-    
-    if (mode === 'single') {
-        singleModeBtn.classList.add('active');
-        batchModeBtn.classList.remove('active');
-        singleMode.style.display = 'block';
-        batchMode.style.display = 'none';
-        resetApp();
-    } else {
-        singleModeBtn.classList.remove('active');
-        batchModeBtn.classList.add('active');
-        singleMode.style.display = 'none';
-        batchMode.style.display = 'block';
-        resetBatchApp();
-    }
+    state.mode = mode;
+    tabSingle.classList.toggle('active', mode === 'single');
+    tabBatch.classList.toggle('active', mode === 'batch');
+    singleMode.classList.toggle('active', mode === 'single');
+    batchMode.classList.toggle('active', mode === 'batch');
 }
 
-// Funciones de drag and drop - Modo Individual
-function handleDragOver(e) {
-    e.preventDefault();
-    audioUploadArea.classList.add('dragover');
-}
+// ============================================================
+// Single Mode — Upload
+// ============================================================
 
-function handleDragLeave(e) {
-    e.preventDefault();
-    audioUploadArea.classList.remove('dragover');
-}
+// Drag & drop
+setupDropZone(dropZoneSingle, (files) => {
+    if (files.length > 0) uploadSingleFile(files[0]);
+});
 
-function handleDrop(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    audioUploadArea.classList.remove('dragover');
-    const files = e.dataTransfer.files;
-    console.log('🔍 DEBUG handleDrop - Archivos recibidos:', files.length);
-    
-    if (files.length > 0) {
-        const file = files[0];
-        console.log('🔍 DEBUG - Archivo:', {
-            name: file.name,
-            type: file.type,
-            size: file.size
-        });
-        
-        // Verificar si es un archivo de audio por tipo MIME o extensión
-        // Algunos sistemas no detectan correctamente el tipo MIME, así que confiamos más en la extensión
-        const fileExtension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0] || '';
-        const validExtensions = ['.mp3', '.wav', '.flac', '.m4a', '.ogg', '.aac', '.mp4']; // mp4 para algunos archivos de audio
-        const hasAudioMime = file.type && (file.type.startsWith('audio/') || file.type.startsWith('video/'));
-        const hasAudioExtension = validExtensions.includes(fileExtension);
-        const isAudio = hasAudioMime || hasAudioExtension;
-        
-        console.log('🔍 DEBUG - Validación:', {
-            fileName: file.name,
-            fileType: file.type || '(vacío)',
-            fileExtension: fileExtension || '(sin extensión)',
-            hasAudioMime,
-            hasAudioExtension,
-            isAudio
-        });
-        
-        if (isAudio) {
-            console.log('✅ Archivo de audio válido, procesando...');
-            handleAudioFile(file);
+fileInputSingle.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) uploadSingleFile(e.target.files[0]);
+});
+
+async function uploadSingleFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    uploadZoneSingle.querySelector('.upload-area h3').textContent = 'Uploading...';
+
+    try {
+        const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Upload failed');
+        }
+        const data = await res.json();
+
+        // Store state
+        state.single.fileId = data.file_id;
+        state.single.filePath = data.filepath;
+        state.single.duration = data.duration;
+        state.single.coverPath = data.cover_path;
+        state.single.endSec = Math.min(30, data.duration);
+
+        // Populate editor
+        titleSingle.value = data.title;
+        artistSingle.value = data.artist;
+        albumSingle.value = data.album;
+        durationSingle.value = formatTime(data.duration);
+        endTimeInput.value = state.single.endSec.toFixed(1);
+        endTimeInput.max = data.duration;
+        startTimeInput.max = data.duration;
+        updateSegmentDuration();
+
+        // Cover
+        if (data.cover_url) {
+            coverImgSingle.src = data.cover_url;
+            coverImgSingle.style.display = 'block';
         } else {
-            console.warn('❌ Archivo no válido:', file.name, 'Tipo:', file.type || 'desconocido', 'Extensión:', fileExtension || 'sin extensión');
-            // Solo mostrar alerta si realmente no es un archivo de audio válido
-            if (fileExtension && !validExtensions.includes(fileExtension)) {
-                alert(`Por favor, sube un archivo de audio válido (MP3, WAV, FLAC, M4A, OGG, AAC)\n\nArchivo: ${file.name}\nExtensión detectada: ${fileExtension || 'ninguna'}\nTipo MIME: ${file.type || 'desconocido'}`);
+            coverImgSingle.style.display = 'none';
+        }
+
+        // Setup audio player
+        audioPlayer.src = `/api/preview-audio/${data.file_id}`;
+
+        // Show editor, hide upload
+        uploadZoneSingle.classList.add('hidden');
+        editorSingle.classList.remove('hidden');
+        resultSingle.classList.add('hidden');
+        progressSingle.classList.add('hidden');
+
+        // Load waveform
+        loadWaveform(data.file_id);
+
+    } catch (err) {
+        alert('Error uploading file: ' + err.message);
+        uploadZoneSingle.querySelector('.upload-area h3').textContent = 'Drag your audio file here';
+    }
+}
+
+// Cover change
+coverInputSingle.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+        const file = e.target.files[0];
+        state.single.customCoverFile = file;
+        const url = URL.createObjectURL(file);
+        coverImgSingle.src = url;
+    }
+});
+
+// ============================================================
+// Waveform
+// ============================================================
+
+async function loadWaveform(fileId) {
+    try {
+        const res = await fetch(`/api/waveform/${fileId}`);
+        const data = await res.json();
+        state.single.peaks = data.peaks;
+        drawWaveform();
+        updateSelection();
+    } catch (err) {
+        console.error('Waveform error:', err);
+    }
+}
+
+function drawWaveform() {
+    const canvas = waveformCanvas;
+    const ctx = canvas.getContext('2d');
+    const peaks = state.single.peaks;
+
+    // Set canvas resolution
+    const rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width * 2;
+    canvas.height = rect.height * 2;
+    ctx.scale(2, 2);
+
+    const w = rect.width;
+    const h = rect.height;
+    const barWidth = w / peaks.length;
+    const centerY = h / 2;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Draw bars
+    peaks.forEach((peak, i) => {
+        const barHeight = Math.max(2, peak * centerY * 0.85);
+        const x = i * barWidth;
+
+        // Light bar on dark glass
+        const lightness = 70 + (i / peaks.length) * 15;
+        ctx.fillStyle = `hsla(0, 0%, ${lightness}%, 0.7)`;
+
+        // Top half
+        ctx.fillRect(x, centerY - barHeight, barWidth - 0.5, barHeight);
+        // Bottom half (mirrored, slightly shorter)
+        ctx.fillRect(x, centerY, barWidth - 0.5, barHeight * 0.7);
+    });
+
+    // Center line
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, centerY);
+    ctx.lineTo(w, centerY);
+    ctx.stroke();
+}
+
+function updateSelection() {
+    const duration = state.single.duration;
+    if (duration <= 0) return;
+
+    const container = waveformContainer;
+    const containerWidth = container.offsetWidth;
+
+    const startPct = (state.single.startSec / duration) * 100;
+    const endPct = (state.single.endSec / duration) * 100;
+
+    selectionOverlay.style.left = startPct + '%';
+    selectionOverlay.style.width = (endPct - startPct) + '%';
+
+    handleLeft.style.left = startPct + '%';
+    handleRight.style.left = endPct + '%';
+}
+
+function updateSegmentDuration() {
+    const dur = state.single.endSec - state.single.startSec;
+    segmentDuration.textContent = dur.toFixed(1) + 's';
+}
+
+// Time inputs
+startTimeInput.addEventListener('input', (e) => {
+    let val = parseFloat(e.target.value) || 0;
+    val = Math.max(0, Math.min(val, state.single.endSec - 1));
+    state.single.startSec = val;
+    updateSelection();
+    updateSegmentDuration();
+});
+
+endTimeInput.addEventListener('input', (e) => {
+    let val = parseFloat(e.target.value) || 0;
+    val = Math.max(state.single.startSec + 1, Math.min(val, state.single.duration));
+    state.single.endSec = val;
+    updateSelection();
+    updateSegmentDuration();
+});
+
+// Handle dragging
+let dragging = null;
+
+handleLeft.addEventListener('mousedown', (e) => { dragging = 'left'; e.preventDefault(); });
+handleRight.addEventListener('mousedown', (e) => { dragging = 'right'; e.preventDefault(); });
+
+// Also support clicking on the waveform to set position
+waveformContainer.addEventListener('mousedown', (e) => {
+    if (e.target === handleLeft || e.target === handleRight) return;
+
+    const rect = waveformContainer.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    const time = pct * state.single.duration;
+
+    // Determine which handle is closer
+    const distToStart = Math.abs(time - state.single.startSec);
+    const distToEnd = Math.abs(time - state.single.endSec);
+
+    if (distToStart < distToEnd) {
+        dragging = 'left';
+    } else {
+        dragging = 'right';
+    }
+
+    updateDragPosition(e.clientX);
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    updateDragPosition(e.clientX);
+});
+
+document.addEventListener('mouseup', () => {
+    dragging = null;
+});
+
+function updateDragPosition(clientX) {
+    const rect = waveformContainer.getBoundingClientRect();
+    let pct = (clientX - rect.left) / rect.width;
+    pct = Math.max(0, Math.min(1, pct));
+    const time = pct * state.single.duration;
+
+    if (dragging === 'left') {
+        state.single.startSec = Math.min(time, state.single.endSec - 1);
+        startTimeInput.value = state.single.startSec.toFixed(1);
+    } else if (dragging === 'right') {
+        state.single.endSec = Math.max(time, state.single.startSec + 1);
+        endTimeInput.value = state.single.endSec.toFixed(1);
+    }
+
+    updateSelection();
+    updateSegmentDuration();
+}
+
+// ============================================================
+// Audio Preview
+// ============================================================
+
+playBtn.addEventListener('click', () => {
+    if (state.single.isPlaying) {
+        stopAudio();
+    } else {
+        playAudio();
+    }
+});
+
+function playAudio() {
+    const audio = audioPlayer;
+    audio.currentTime = state.single.startSec;
+    audio.play();
+    state.single.isPlaying = true;
+    playBtn.textContent = '⏸ Stop';
+
+    // Stop at end time
+    const checkEnd = setInterval(() => {
+        if (audio.currentTime >= state.single.endSec || audio.paused) {
+            stopAudio();
+            clearInterval(checkEnd);
+        }
+    }, 100);
+}
+
+function stopAudio() {
+    audioPlayer.pause();
+    state.single.isPlaying = false;
+    playBtn.textContent = '▶ Play segment';
+}
+
+// ============================================================
+// Single Mode — Generate Video
+// ============================================================
+
+generateBtnSingle.addEventListener('click', generateSingleVideo);
+
+async function generateSingleVideo() {
+    const formData = new FormData();
+    formData.append('file_id', state.single.fileId);
+    formData.append('artist', artistSingle.value);
+    formData.append('title', titleSingle.value);
+    formData.append('start_sec', state.single.startSec);
+    formData.append('end_sec', state.single.endSec);
+
+    if (state.single.coverPath) {
+        formData.append('cover_path', state.single.coverPath);
+    }
+    if (state.single.customCoverFile) {
+        formData.append('cover_file', state.single.customCoverFile);
+    }
+
+    // Show progress
+    editorSingle.classList.add('hidden');
+    progressSingle.classList.remove('hidden');
+    resultSingle.classList.add('hidden');
+    progressFillSingle.style.width = '0%';
+    progressTextSingle.textContent = 'Starting generation...';
+
+    try {
+        // Start generation — returns immediately with job_id
+        const startRes = await fetch('/api/generate', { method: 'POST', body: formData });
+        if (!startRes.ok) {
+            const err = await startRes.json();
+            throw new Error(err.detail || 'Generation failed');
+        }
+        const { job_id } = await startRes.json();
+
+        // Poll progress until done
+        const result = await pollProgress(job_id);
+
+        if (result.status === 'error') {
+            throw new Error(result.result?.error || 'Generation failed');
+        }
+
+        // Show result
+        progressSingle.classList.add('hidden');
+        resultSingle.classList.remove('hidden');
+        resultVideoSingle.src = result.result.download_url;
+        downloadLinkSingle.href = result.result.download_url;
+        downloadLinkSingle.download = result.result.filename;
+
+    } catch (err) {
+        alert('Error generating video: ' + err.message);
+        progressSingle.classList.add('hidden');
+        editorSingle.classList.remove('hidden');
+    }
+}
+
+function pollProgress(jobId) {
+    return new Promise((resolve, reject) => {
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/progress/${jobId}`);
+                const data = await res.json();
+
+                if (data.progress >= 0) {
+                    progressFillSingle.style.width = data.progress + '%';
+                    progressTextSingle.textContent = `Rendering... ${data.progress}%`;
+                }
+
+                if (data.status === 'done' || data.status === 'error') {
+                    clearInterval(interval);
+                    resolve(data);
+                }
+            } catch (e) {
+                // Network error, keep trying
             }
-        }
-    }
+        }, 500);
+    });
 }
 
-function handleAudioFileSelect(e) {
-    const file = e.target.files[0];
-    if (file) {
-        handleAudioFile(file);
-    }
-}
+newVideoBtnSingle.addEventListener('click', () => {
+    resultSingle.classList.add('hidden');
+    uploadZoneSingle.classList.remove('hidden');
+    uploadZoneSingle.querySelector('.upload-area h3').textContent = 'Drag your audio file here';
+    state.single.fileId = null;
+    state.single.customCoverFile = null;
+    fileInputSingle.value = '';
+});
 
-// Manejar archivo de audio - Modo Individual
-async function handleAudioFile(file) {
-    try {
-        showStatus(generateStatus, 'Subiendo archivo...', 'info');
-        
+// ============================================================
+// Batch Mode — Upload
+// ============================================================
+
+setupDropZone(dropZoneBatch, (files) => {
+    uploadBatchFiles(files);
+});
+
+fileInputBatch.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) uploadBatchFiles(e.target.files);
+});
+
+async function uploadBatchFiles(files) {
+    const fileArr = Array.from(files).slice(0, 10 - state.batch.tracks.length);
+
+    for (const file of fileArr) {
         const formData = new FormData();
         formData.append('file', file);
-        
-        const response = await fetch('/api/upload/audio', {
-            method: 'POST',
-            body: formData
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Error subiendo archivo');
+
+        try {
+            const res = await fetch('/api/upload', { method: 'POST', body: formData });
+            if (!res.ok) continue;
+            const data = await res.json();
+
+            state.batch.tracks.push({
+                fileId: data.file_id,
+                filePath: data.filepath,
+                artist: data.artist,
+                title: data.title,
+                album: data.album,
+                duration: data.duration,
+                coverUrl: data.cover_url,
+                coverPath: data.cover_path,
+                startSec: 0,
+                endSec: Math.min(30, data.duration),
+                peaks: [],
+            });
+
+            // Load waveform for this track
+            loadBatchWaveform(state.batch.tracks.length - 1, data.file_id);
+        } catch (err) {
+            console.error('Batch upload error:', err);
         }
-        
-        const data = await response.json();
-        appState.audioFileId = data.file_id;
-        appState.audioDuration = data.metadata.duration || 0;
-        appState.metadata.artist = data.metadata.artist || '';
-        appState.metadata.title = data.metadata.title || '';
-        appState.coverFileId = data.cover_file_id || null;
-        
-        // Mostrar información
-        audioFilename.textContent = data.filename;
-        audioInfo.style.display = 'block';
-        audioDurationSpan.textContent = formatTime(appState.audioDuration);
-        
-        // Llenar metadata
-        artistInput.value = appState.metadata.artist;
-        titleInput.value = appState.metadata.title;
-        
-        // Mostrar portada si existe
-        if (appState.coverFileId) {
-            await loadCoverPreview(appState.coverFileId);
-        }
-        
-        // Configurar tiempos por defecto (30 segundos)
-        endTimeInput.max = appState.audioDuration;
-        const defaultDuration = Math.min(30, appState.audioDuration);
-        startTimeInput.value = 0;
-        startTimeInput.max = appState.audioDuration;
-        endTimeInput.value = Math.round(defaultDuration); // Sin decimales
-        
-        // Cargar y mostrar waveform
-        await loadWaveform(appState.audioFileId);
-        
-        // Configurar reproductor de audio
-        setupAudioPlayer(appState.audioFileId);
-        
-        updateVideoDuration();
-        
-        // Mostrar siguientes pasos
-        step2.style.display = 'block';
-        step3.style.display = 'block';
-        step4.style.display = 'block';
-        
-        hideStatus(generateStatus);
-        
-    } catch (error) {
-        showStatus(generateStatus, `Error: ${error.message}`, 'error');
-        console.error(error);
+    }
+
+    renderBatchTracks();
+
+    if (state.batch.tracks.length > 0) {
+        batchActions.classList.remove('hidden');
     }
 }
 
-// Manejar archivo de portada
-async function handleCoverFileSelect(e) {
-    const file = e.target.files[0];
-    if (file) {
-        await uploadCover(file);
-    }
-}
-
-async function uploadCover(file) {
+async function loadBatchWaveform(trackIdx, fileId) {
     try {
-        showStatus(generateStatus, 'Subiendo portada...', 'info');
-        
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const response = await fetch('/api/upload/cover', {
-            method: 'POST',
-            body: formData
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Error subiendo portada');
+        const res = await fetch(`/api/waveform/${fileId}`);
+        const data = await res.json();
+        if (trackIdx < state.batch.tracks.length) {
+            state.batch.tracks[trackIdx].peaks = data.peaks;
+            drawBatchWaveform(trackIdx);
+            updateBatchSelection(trackIdx);
         }
-        
-        const data = await response.json();
-        appState.coverFileId = data.cover_file_id;
-        
-        await loadCoverPreview(appState.coverFileId);
-        removeCoverBtn.style.display = 'block';
-        hideStatus(generateStatus);
-        
-    } catch (error) {
-        showStatus(generateStatus, `Error: ${error.message}`, 'error');
-        console.error(error);
+    } catch (err) {
+        console.error('Batch waveform error:', err);
     }
 }
 
-async function loadCoverPreview(coverFileId) {
-    try {
-        const imageUrl = `/api/cover/${coverFileId}`;
-        const img = document.createElement('img');
-        img.src = imageUrl;
-        img.style.width = '100%';
-        img.style.height = '100%';
-        img.style.objectFit = 'cover';
-        img.onerror = () => {
-            coverPreview.innerHTML = '<p>Error cargando portada</p>';
+function renderBatchTracks() {
+    batchTracksContainer.innerHTML = '';
+
+    state.batch.tracks.forEach((track, idx) => {
+        const card = document.createElement('div');
+        card.className = 'batch-track-card';
+        card.dataset.idx = idx;
+        card.innerHTML = `
+            <div class="batch-track-header">
+                <img class="batch-track-cover" src="${track.coverUrl || ''}" 
+                     alt="Cover" onerror="this.style.display='none'">
+                <div class="batch-track-info">
+                    <div class="batch-track-title">${escapeHtml(track.title)}</div>
+                    <div class="batch-track-artist">${escapeHtml(track.artist)}</div>
+                </div>
+                <div class="batch-track-duration">${formatTime(track.duration)}</div>
+                <button class="batch-track-remove" data-idx="${idx}" title="Remove">✕</button>
+            </div>
+            <div class="batch-track-waveform-section">
+                <div class="batch-waveform-container" data-idx="${idx}">
+                    <canvas data-idx="${idx}" width="800" height="80"></canvas>
+                    <div class="selection-overlay" data-idx="${idx}"></div>
+                    <div class="handle handle-left" data-idx="${idx}" data-handle="left"></div>
+                    <div class="handle handle-right" data-idx="${idx}" data-handle="right"></div>
+                </div>
+                <div class="batch-track-time-row">
+                    <div class="time-input">
+                        <label>Start</label>
+                        <input type="number" data-idx="${idx}" data-field="start" 
+                               value="${track.startSec.toFixed(1)}" min="0" max="${track.duration}" step="0.1">
+                    </div>
+                    <button class="btn btn-secondary batch-play-btn" data-idx="${idx}">
+                        ${state.batch.playingIdx === idx ? '⏸ Stop' : '▶ Play'}
+                    </button>
+                    <div class="time-display" data-idx="${idx}">${(track.endSec - track.startSec).toFixed(1)}s</div>
+                    <div class="time-input">
+                        <label>End</label>
+                        <input type="number" data-idx="${idx}" data-field="end" 
+                               value="${track.endSec.toFixed(1)}" min="0" max="${track.duration}" step="0.1">
+                    </div>
+                </div>
+            </div>
+        `;
+        batchTracksContainer.appendChild(card);
+
+        // Draw waveform if peaks are loaded
+        if (track.peaks.length > 0) {
+            drawBatchWaveform(idx);
+            updateBatchSelection(idx);
+        }
+    });
+
+    // Event: Remove buttons
+    batchTracksContainer.querySelectorAll('.batch-track-remove').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            const idx = parseInt(e.target.dataset.idx);
+            state.batch.tracks.splice(idx, 1);
+            renderBatchTracks();
+            if (state.batch.tracks.length === 0) {
+                batchActions.classList.add('hidden');
+            }
+        });
+    });
+
+    // Event: Time inputs
+    batchTracksContainer.querySelectorAll('.batch-track-time-row input').forEach((input) => {
+        input.addEventListener('input', (e) => {
+            const idx = parseInt(e.target.dataset.idx);
+            const field = e.target.dataset.field;
+            const track = state.batch.tracks[idx];
+            let val = parseFloat(e.target.value) || 0;
+
+            if (field === 'start') {
+                val = Math.max(0, Math.min(val, track.endSec - 1));
+                track.startSec = val;
+            } else {
+                val = Math.max(track.startSec + 1, Math.min(val, track.duration));
+                track.endSec = val;
+            }
+
+            updateBatchSelection(idx);
+            const durDisplay = batchTracksContainer.querySelector(`.time-display[data-idx="${idx}"]`);
+            if (durDisplay) durDisplay.textContent = (track.endSec - track.startSec).toFixed(1) + 's';
+        });
+    });
+
+    // Event: Play buttons
+    batchTracksContainer.querySelectorAll('.batch-play-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            const idx = parseInt(e.target.dataset.idx);
+            toggleBatchPlay(idx);
+        });
+    });
+
+    // Event: Handle dragging for each track
+    batchTracksContainer.querySelectorAll('.batch-waveform-container').forEach((container) => {
+        const idx = parseInt(container.dataset.idx);
+        let draggingHandle = null;
+
+        const onMouseDown = (e) => {
+            if (e.target.dataset.handle) {
+                draggingHandle = e.target.dataset.handle;
+                e.preventDefault();
+            } else if (e.target.tagName === 'CANVAS') {
+                // Click on waveform — determine closest handle
+                const rect = container.getBoundingClientRect();
+                const pct = (e.clientX - rect.left) / rect.width;
+                const time = pct * state.batch.tracks[idx].duration;
+                const distStart = Math.abs(time - state.batch.tracks[idx].startSec);
+                const distEnd = Math.abs(time - state.batch.tracks[idx].endSec);
+                draggingHandle = distStart < distEnd ? 'left' : 'right';
+                updateBatchDrag(idx, container, e.clientX, draggingHandle);
+            }
         };
-        
-        coverPreview.innerHTML = '';
-        coverPreview.appendChild(img);
-        
-    } catch (error) {
-        console.error('Error cargando portada:', error);
-        coverPreview.innerHTML = '<p>Error cargando portada</p>';
+
+        const onMouseMove = (e) => {
+            if (!draggingHandle) return;
+            updateBatchDrag(idx, container, e.clientX, draggingHandle);
+        };
+
+        const onMouseUp = () => { draggingHandle = null; };
+
+        container.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    });
+}
+
+function updateBatchDrag(idx, container, clientX, handle) {
+    const rect = container.getBoundingClientRect();
+    let pct = (clientX - rect.left) / rect.width;
+    pct = Math.max(0, Math.min(1, pct));
+    const track = state.batch.tracks[idx];
+    const time = pct * track.duration;
+
+    if (handle === 'left') {
+        track.startSec = Math.min(time, track.endSec - 1);
+        const startInput = batchTracksContainer.querySelector(`input[data-idx="${idx}"][data-field="start"]`);
+        if (startInput) startInput.value = track.startSec.toFixed(1);
+    } else {
+        track.endSec = Math.max(time, track.startSec + 1);
+        const endInput = batchTracksContainer.querySelector(`input[data-idx="${idx}"][data-field="end"]`);
+        if (endInput) endInput.value = track.endSec.toFixed(1);
     }
+
+    updateBatchSelection(idx);
+    const durDisplay = batchTracksContainer.querySelector(`.time-display[data-idx="${idx}"]`);
+    if (durDisplay) durDisplay.textContent = (track.endSec - track.startSec).toFixed(1) + 's';
 }
 
-function removeCover() {
-    appState.coverFileId = null;
-    coverPreview.innerHTML = '<p>No hay portada disponible</p>';
-    removeCoverBtn.style.display = 'none';
-    coverFileInput.value = '';
+function drawBatchWaveform(idx) {
+    const canvas = batchTracksContainer.querySelector(`canvas[data-idx="${idx}"]`);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const peaks = state.batch.tracks[idx].peaks;
+    if (!peaks.length) return;
+
+    const rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width * 2;
+    canvas.height = rect.height * 2;
+    ctx.scale(2, 2);
+
+    const w = rect.width;
+    const h = rect.height;
+    const barWidth = w / peaks.length;
+    const centerY = h / 2;
+
+    ctx.clearRect(0, 0, w, h);
+
+    peaks.forEach((peak, i) => {
+        const barHeight = Math.max(1, peak * centerY * 0.85);
+        const x = i * barWidth;
+        const lightness = 70 + (i / peaks.length) * 15;
+        ctx.fillStyle = `hsla(0, 0%, ${lightness}%, 0.7)`;
+        ctx.fillRect(x, centerY - barHeight, barWidth - 0.5, barHeight);
+        ctx.fillRect(x, centerY, barWidth - 0.5, barHeight * 0.7);
+    });
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, centerY);
+    ctx.lineTo(w, centerY);
+    ctx.stroke();
 }
 
-// Actualizar duración del video
-function updateVideoDuration() {
-    const startTime = Math.round(parseFloat(startTimeInput.value) || 0); // Sin decimales
-    const endTime = Math.round(parseFloat(endTimeInput.value) || 0); // Sin decimales
-    const duration = Math.max(0, endTime - startTime);
-    videoDurationSpan.textContent = formatTime(duration);
-    
-    // Si el reproductor de audio está activo, verificar que esté dentro del rango
-    if (appState.audioPlayer) {
-        const currentTime = appState.audioPlayer.currentTime;
-        const wasPlaying = !appState.audioPlayer.paused;
-        
-        // Si está fuera del rango seleccionado, ajustar
-        if (currentTime < startTime || currentTime >= endTime) {
-            // Si estaba reproduciendo, pausar primero para evitar conflictos
-            if (wasPlaying) {
-                appState.audioPlayer.pause();
-            }
-            // Ajustar al nuevo tiempo de inicio
-            appState.audioPlayer.currentTime = startTime;
-            // Actualizar el botón de play/pause
-            if (playPauseBtn) {
-                playPauseBtn.textContent = '▶️ Reproducir';
-            }
+function updateBatchSelection(idx) {
+    const track = state.batch.tracks[idx];
+    if (!track || track.duration <= 0) return;
+
+    const overlay = batchTracksContainer.querySelector(`.selection-overlay[data-idx="${idx}"]`);
+    const handleL = batchTracksContainer.querySelector(`.handle-left[data-idx="${idx}"]`);
+    const handleR = batchTracksContainer.querySelector(`.handle-right[data-idx="${idx}"]`);
+
+    if (!overlay) return;
+
+    const startPct = (track.startSec / track.duration) * 100;
+    const endPct = (track.endSec / track.duration) * 100;
+
+    overlay.style.left = startPct + '%';
+    overlay.style.width = (endPct - startPct) + '%';
+
+    if (handleL) handleL.style.left = startPct + '%';
+    if (handleR) handleR.style.left = endPct + '%';
+}
+
+// Shared audio element for batch playback
+const batchAudio = new Audio();
+
+function toggleBatchPlay(idx) {
+    if (state.batch.playingIdx === idx) {
+        // Already playing this track — stop it
+        stopBatchPlay();
+    } else {
+        // Stop any current playback first
+        if (state.batch.playingIdx >= 0) stopBatchPlay();
+
+        const track = state.batch.tracks[idx];
+        if (!track) return;
+
+        state.batch.playingIdx = idx;
+
+        // Update button text
+        const btn = batchTracksContainer.querySelector(`.batch-play-btn[data-idx="${idx}"]`);
+        if (btn) btn.textContent = '⏸ Stop';
+
+        const audioUrl = `/api/preview-audio/${track.fileId}`;
+
+        const startPlayback = () => {
+            batchAudio.currentTime = track.startSec;
+            batchAudio.play().catch(err => console.error('Batch play error:', err));
+
+            // Poll to stop at endSec
+            state.batch.playCheckInterval = setInterval(() => {
+                if (batchAudio.currentTime >= track.endSec || batchAudio.paused) {
+                    stopBatchPlay();
+                }
+            }, 100);
+        };
+
+        if (batchAudio.src && batchAudio.src.endsWith(audioUrl)) {
+            // Same source — just seek and play
+            startPlayback();
+        } else {
+            batchAudio.src = audioUrl;
+            batchAudio.addEventListener('loadeddata', startPlayback, { once: true });
+            batchAudio.load();
         }
     }
-    
-    // Sincronizar waveform si existe (solo si no estamos arrastrando)
-    if (appState.waveform && waveformSelection && !appState.isDragging) {
-        updateWaveformSelection(startTime, endTime, false); // false = no actualizar inputs
+}
+
+function stopBatchPlay() {
+    batchAudio.pause();
+    if (state.batch.playCheckInterval) {
+        clearInterval(state.batch.playCheckInterval);
+        state.batch.playCheckInterval = null;
+    }
+    // Reset button text of the playing track
+    if (state.batch.playingIdx >= 0) {
+        const btn = batchTracksContainer.querySelector(`.batch-play-btn[data-idx="${state.batch.playingIdx}"]`);
+        if (btn) btn.textContent = '▶ Play';
+    }
+    state.batch.playingIdx = -1;
+}
+
+// ============================================================
+// Batch Mode — Generate
+// ============================================================
+
+generateBtnBatch.addEventListener('click', generateBatchVideos);
+
+async function generateBatchVideos() {
+    const tracks = state.batch.tracks.map((t) => ({
+        file_id: t.fileId,
+        artist: t.artist,
+        title: t.title,
+        cover_path: t.coverPath,
+        start_sec: t.startSec,
+        end_sec: t.endSec,
+    }));
+
+    // Show progress
+    batchActions.classList.add('hidden');
+    uploadZoneBatch.classList.add('hidden');
+    batchTracksContainer.innerHTML = '';
+    progressBatch.classList.remove('hidden');
+    resultBatch.classList.add('hidden');
+    progressFillBatch.style.width = '10%';
+    batchProgressText.textContent = `Processing ${tracks.length} tracks...`;
+
+    const formData = new FormData();
+    formData.append('data', JSON.stringify(tracks));
+
+    try {
+        const res = await fetch('/api/batch/generate', { method: 'POST', body: formData });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Batch generation failed');
+        }
+
+        const data = await res.json();
+
+        // Show results
+        progressBatch.classList.add('hidden');
+        resultBatch.classList.remove('hidden');
+
+        batchResultsList.innerHTML = '';
+        data.results.forEach((r) => {
+            const item = document.createElement('div');
+            item.className = 'batch-result-item';
+            item.innerHTML = `
+                <span class="batch-result-name">${escapeHtml(r.filename)}</span>
+                <span class="batch-result-status ${r.status}">${r.status === 'success' ? '✅' : '❌'}</span>
+                ${r.download_url ? `<a class="batch-result-download" href="${r.download_url}" download>Download</a>` : ''}
+            `;
+            batchResultsList.appendChild(item);
+        });
+
+        if (data.zip_url) {
+            downloadZipBatch.href = data.zip_url;
+            downloadZipBatch.hidden = false;
+        }
+
+    } catch (err) {
+        alert('Batch error: ' + err.message);
+        progressBatch.classList.add('hidden');
+        batchActions.classList.remove('hidden');
+        uploadZoneBatch.classList.remove('hidden');
+        renderBatchTracks();
     }
 }
 
-// Formatear tiempo
+newBatchBtn.addEventListener('click', () => {
+    state.batch.tracks = [];
+    resultBatch.classList.add('hidden');
+    uploadZoneBatch.classList.remove('hidden');
+    batchTracksContainer.innerHTML = '';
+    downloadZipBatch.hidden = true;
+    fileInputBatch.value = '';
+});
+
+// ============================================================
+// Utilities
+// ============================================================
+
+function setupDropZone(zone, onFiles) {
+    zone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        zone.classList.add('drag-over');
+    });
+
+    zone.addEventListener('dragleave', () => {
+        zone.classList.remove('drag-over');
+    });
+
+    zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        onFiles(e.dataTransfer.files);
+    });
+
+    // Click to upload on the whole zone
+    zone.addEventListener('click', (e) => {
+        // Don't trigger if clicking the button (it has its own handler)
+        if (e.target.tagName === 'BUTTON') return;
+        const input = zone.querySelector('input[type="file"]');
+        if (input) input.click();
+    });
+}
+
 function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-// Generar video - Modo Individual
-async function generateVideo() {
-    console.log('🔍 DEBUG generateVideo - Iniciando generación de video');
-    
-    try {
-        if (!appState.audioFileId) {
-            throw new Error('Por favor sube un archivo de audio');
-        }
-        
-        const artist = artistInput.value.trim() || 'Unknown Artist';
-        const title = titleInput.value.trim() || 'Unknown Title';
-        const startTime = Math.round(parseFloat(startTimeInput.value) || 0); // Sin decimales
-        const endTime = Math.round(parseFloat(endTimeInput.value) || 0); // Sin decimales
-        
-        console.log('🔍 DEBUG - Parámetros de generación:', {
-            audioFileId: appState.audioFileId,
-            artist,
-            title,
-            startTime,
-            endTime,
-            coverFileId: appState.coverFileId,
-            audioDuration: appState.audioDuration
-        });
-        
-        if (endTime <= startTime) {
-            throw new Error('El tiempo final debe ser mayor que el tiempo inicial');
-        }
-        
-        if (endTime > appState.audioDuration) {
-            throw new Error(`El tiempo final no puede exceder la duración del audio (${formatTime(appState.audioDuration)})`);
-        }
-        
-        generateBtn.disabled = true;
-        generateBtn.innerHTML = '<span class="spinner"></span> Generando video...';
-        showStatus(generateStatus, 'Generando video. Esto puede tomar unos minutos...', 'info');
-        
-        const requestBody = {
-            audio_file_id: appState.audioFileId,
-            artist: artist,
-            title: title,
-            start_time: startTime,
-            end_time: endTime,
-            cover_file_id: appState.coverFileId
-        };
-        
-        console.log('🔍 DEBUG - Enviando solicitud:', requestBody);
-        
-        const response = await fetch('/api/generate', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestBody)
-        });
-        
-        console.log('🔍 DEBUG - Respuesta recibida:', {
-            status: response.status,
-            statusText: response.statusText,
-            ok: response.ok
-        });
-        
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ detail: 'Error desconocido' }));
-            console.error('❌ ERROR en respuesta:', errorData);
-            throw new Error(errorData.detail || `Error ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        console.log('✅ DEBUG - Video generado exitosamente:', data);
-        
-        showStatus(generateStatus, '¡Video generado exitosamente!', 'success');
-        downloadLink.href = `/api/download/${data.video_id}`;
-        downloadLink.download = data.video_id;
-        
-        step4.style.display = 'none';
-        step5.style.display = 'block';
-        
-        generateBtn.disabled = false;
-        generateBtn.innerHTML = '🎬 Generar Video';
-        
-    } catch (error) {
-        console.error('❌ ERROR generando video:', error);
-        console.error('Stack trace:', error.stack);
-        showStatus(generateStatus, `Error: ${error.message}`, 'error');
-        generateBtn.disabled = false;
-        generateBtn.innerHTML = '🎬 Generar Video';
-    }
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
 }
 
-// Resetear aplicación - Modo Individual
-function resetApp() {
-    appState.audioFileId = null;
-    appState.coverFileId = null;
-    appState.audioDuration = 0;
-    appState.metadata = { artist: '', title: '' };
-    appState.waveform = null;
-    appState.isDragging = false;
-    appState.dragType = null;
-    
-    // Detener y limpiar reproductor de audio
-    if (appState.audioPlayer) {
-        appState.audioPlayer.pause();
-        appState.audioPlayer.src = '';
-        appState.audioPlayer = null;
-    }
-    
-    audioFileInput.value = '';
-    audioInfo.style.display = 'none';
-    artistInput.value = '';
-    titleInput.value = '';
-    coverPreview.innerHTML = '<p>No hay portada disponible</p>';
-    removeCoverBtn.style.display = 'none';
-    coverFileInput.value = '';
-    startTimeInput.value = 0;
-    endTimeInput.value = 30;
-    
-    // Limpiar waveform
-    if (appState.waveformCtx && appState.waveformCanvas) {
-        appState.waveformCtx.clearRect(0, 0, appState.waveformCanvas.width, appState.waveformCanvas.height);
-    }
-    if (waveformSelection) {
-        waveformSelection.style.width = '0%';
-        waveformSelection.style.left = '0%';
-    }
-    if (totalTimeSpan) {
-        totalTimeSpan.textContent = '0:00';
-    }
-    if (currentTimeSpan) {
-        currentTimeSpan.textContent = '0:00';
-    }
-    if (playPauseBtn) {
-        playPauseBtn.textContent = '▶️ Reproducir';
-    }
-    
-    step2.style.display = 'none';
-    step3.style.display = 'none';
-    step4.style.display = 'none';
-    step5.style.display = 'none';
-    
-    hideStatus(generateStatus);
-}
-
-// ========== MODO BATCH ==========
-
-// Funciones de drag and drop - Modo Batch
-function handleBatchDragOver(e) {
-    e.preventDefault();
-    batchUploadArea.classList.add('dragover');
-}
-
-function handleBatchDragLeave(e) {
-    e.preventDefault();
-    batchUploadArea.classList.remove('dragover');
-}
-
-function handleBatchDrop(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    batchUploadArea.classList.remove('dragover');
-    
-    const validExtensions = ['.mp3', '.wav', '.flac', '.m4a', '.ogg', '.aac', '.mp4'];
-    const files = Array.from(e.dataTransfer.files).filter(f => {
-        const fileExtension = f.name.toLowerCase().match(/\.[^.]+$/)?.[0] || '';
-        const hasAudioMime = f.type && (f.type.startsWith('audio/') || f.type.startsWith('video/'));
-        const hasAudioExtension = validExtensions.includes(fileExtension);
-        return hasAudioMime || hasAudioExtension;
-    });
-    
-    if (files.length > 0) {
-        handleBatchAudioFiles(files);
-    } else {
-        alert('Por favor, arrastra archivos de audio válidos (MP3, WAV, FLAC, M4A, OGG, AAC)');
-    }
-}
-
-function handleBatchAudioFilesSelect(e) {
-    const validExtensions = ['.mp3', '.wav', '.flac', '.m4a', '.ogg', '.aac', '.mp4'];
-    const files = Array.from(e.target.files).filter(f => {
-        const fileExtension = f.name.toLowerCase().match(/\.[^.]+$/)?.[0] || '';
-        const hasAudioMime = f.type && (f.type.startsWith('audio/') || f.type.startsWith('video/'));
-        const hasAudioExtension = validExtensions.includes(fileExtension);
-        return hasAudioMime || hasAudioExtension;
-    });
-    
-    if (files.length > 0) {
-        handleBatchAudioFiles(files);
-    } else {
-        alert('Por favor, selecciona archivos de audio válidos (MP3, WAV, FLAC, M4A, OGG, AAC)');
-    }
-}
-
-// Manejar múltiples archivos de audio - Modo Batch
-async function handleBatchAudioFiles(files) {
-    // Limitar a 10 archivos
-    const filesToProcess = files.slice(0, 10);
-    if (files.length > 10) {
-        alert(`Solo se procesarán los primeros 10 archivos. Se ignoraron ${files.length - 10} archivos.`);
-    }
-    
-    // Limpiar lista anterior
-    appState.batchSongs = [];
-    batchFilesList.innerHTML = '';
-    batchFilesList.style.display = 'none';
-    
-    // Procesar cada archivo
-    for (const file of filesToProcess) {
-        try {
-            const formData = new FormData();
-            formData.append('file', file);
-            
-            const response = await fetch('/api/upload/audio', {
-                method: 'POST',
-                body: formData
-            });
-            
-            if (!response.ok) {
-                const error = await response.json();
-                console.error(`Error subiendo ${file.name}:`, error);
-                continue;
-            }
-            
-            const data = await response.json();
-            
-            // Agregar a la lista de canciones
-            appState.batchSongs.push({
-                file_id: data.file_id,
-                filename: data.filename,
-                metadata: data.metadata,
-                cover_file_id: data.cover_file_id || null,
-                artist: data.metadata.artist || '',
-                title: data.metadata.title || '',
-                duration: data.metadata.duration || 0,
-                start_time: 0,
-                end_time: Math.min(30, data.metadata.duration || 30)
-            });
-            
-        } catch (error) {
-            console.error(`Error procesando ${file.name}:`, error);
-        }
-    }
-    
-    // Mostrar lista de archivos
-    if (appState.batchSongs.length > 0) {
-        displayBatchFilesList();
-        batchStep2.style.display = 'block';
-        renderBatchSongsConfig();
-    }
-}
-
-// Mostrar lista de archivos batch
-function displayBatchFilesList() {
-    batchFilesList.innerHTML = '';
-    batchFilesList.style.display = 'block';
-    
-    appState.batchSongs.forEach((song, index) => {
-        const item = document.createElement('div');
-        item.className = 'batch-file-item';
-        item.innerHTML = `
-            <div class="batch-file-info">
-                <strong>${song.filename}</strong>
-                <span>${song.metadata.artist || 'Sin artista'} - ${song.metadata.title || 'Sin título'}</span>
-                <span>Duración: ${formatTime(song.duration)}</span>
-            </div>
-            <button type="button" class="batch-file-remove" onclick="removeBatchSong(${index})">✕ Eliminar</button>
-        `;
-        batchFilesList.appendChild(item);
-    });
-}
-
-// Eliminar canción del batch
-function removeBatchSong(index) {
-    appState.batchSongs.splice(index, 1);
-    if (appState.batchSongs.length === 0) {
-        batchFilesList.style.display = 'none';
-        batchStep2.style.display = 'none';
-    } else {
-        displayBatchFilesList();
-        renderBatchSongsConfig();
-    }
-}
-
-// Renderizar configuración de canciones batch
-function renderBatchSongsConfig() {
-    batchSongsConfig.innerHTML = '';
-    
-    appState.batchSongs.forEach((song, index) => {
-        const configDiv = document.createElement('div');
-        configDiv.className = 'batch-song-config';
-        configDiv.innerHTML = `
-            <h3>Canción ${index + 1}: ${song.filename}</h3>
-            <div class="form-group">
-                <label>Artista</label>
-                <input type="text" class="batch-artist" data-index="${index}" 
-                       value="${song.artist}" placeholder="Nombre del artista">
-            </div>
-            <div class="form-group">
-                <label>Título</label>
-                <input type="text" class="batch-title" data-index="${index}" 
-                       value="${song.title}" placeholder="Título de la canción">
-            </div>
-            <div class="form-group">
-                <label>Portada del Álbum</label>
-                <div class="cover-section">
-                    <div class="batch-cover-preview" data-index="${index}" style="width: 150px; height: 150px; border: 2px dashed #e0e0e0; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: #f8f9ff; overflow: hidden;">
-                        ${song.cover_file_id ? `<img src="/api/cover/${song.cover_file_id}" style="width: 100%; height: 100%; object-fit: cover;">` : '<p style="color: #999; font-size: 12px; text-align: center; padding: 10px;">Sin portada</p>'}
-                    </div>
-                    <div class="cover-actions">
-                        <input type="file" class="batch-cover-file" data-index="${index}" accept="image/*" style="display: none;">
-                        <button type="button" class="btn btn-secondary batch-upload-cover" data-index="${index}">
-                            ${song.cover_file_id ? 'Cambiar Portada' : 'Subir Portada'}
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div class="form-group">
-                <label>Segmento de Audio (Duración: ${formatTime(song.duration)})</label>
-                <div class="time-inputs">
-                    <div class="time-input-group">
-                        <label>Desde (segundos)</label>
-                        <input type="number" class="batch-start-time" data-index="${index}" 
-                               min="0" step="1" value="${Math.round(song.start_time)}" max="${song.duration}">
-                    </div>
-                    <div class="time-input-group">
-                        <label>Hasta (segundos)</label>
-                        <input type="number" class="batch-end-time" data-index="${index}" 
-                               min="0" step="1" value="${Math.round(song.end_time)}" max="${song.duration}">
-                    </div>
-                </div>
-            </div>
-        `;
-        batchSongsConfig.appendChild(configDiv);
-        
-        // Event listeners para esta canción
-        const artistInput = configDiv.querySelector('.batch-artist');
-        const titleInput = configDiv.querySelector('.batch-title');
-        const startTimeInput = configDiv.querySelector('.batch-start-time');
-        const endTimeInput = configDiv.querySelector('.batch-end-time');
-        const coverFileInput = configDiv.querySelector('.batch-cover-file');
-        const uploadCoverBtn = configDiv.querySelector('.batch-upload-cover');
-        const coverPreview = configDiv.querySelector('.batch-cover-preview');
-        
-        artistInput.addEventListener('input', (e) => {
-            const idx = parseInt(e.target.dataset.index);
-            appState.batchSongs[idx].artist = e.target.value;
-        });
-        
-        titleInput.addEventListener('input', (e) => {
-            const idx = parseInt(e.target.dataset.index);
-            appState.batchSongs[idx].title = e.target.value;
-        });
-        
-        startTimeInput.addEventListener('input', (e) => {
-            const idx = parseInt(e.target.dataset.index);
-            appState.batchSongs[idx].start_time = Math.round(parseFloat(e.target.value) || 0); // Sin decimales
-        });
-        
-        endTimeInput.addEventListener('input', (e) => {
-            const idx = parseInt(e.target.dataset.index);
-            appState.batchSongs[idx].end_time = Math.round(parseFloat(e.target.value) || 0); // Sin decimales
-        });
-        
-        uploadCoverBtn.addEventListener('click', () => coverFileInput.click());
-        coverFileInput.addEventListener('change', async (e) => {
-            const idx = parseInt(e.target.dataset.index);
-            const file = e.target.files[0];
-            if (file) {
-                await uploadBatchCover(file, idx, coverPreview);
-            }
-        });
-    });
-    
-    batchStep3.style.display = 'block';
-}
-
-// Subir portada para una canción del batch
-async function uploadBatchCover(file, index, coverPreviewElement) {
-    try {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const response = await fetch('/api/upload/cover', {
-            method: 'POST',
-            body: formData
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Error subiendo portada');
-        }
-        
-        const data = await response.json();
-        appState.batchSongs[index].cover_file_id = data.cover_file_id;
-        
-        // Actualizar preview
-        const img = document.createElement('img');
-        img.src = `/api/cover/${data.cover_file_id}`;
-        img.style.width = '100%';
-        img.style.height = '100%';
-        img.style.objectFit = 'cover';
-        coverPreviewElement.innerHTML = '';
-        coverPreviewElement.appendChild(img);
-        
-    } catch (error) {
-        console.error('Error subiendo portada:', error);
-        alert(`Error subiendo portada: ${error.message}`);
-    }
-}
-
-// Generar videos en batch
-async function generateBatchVideos() {
-    try {
-        if (appState.batchSongs.length === 0) {
-            throw new Error('No hay canciones para procesar');
-        }
-        
-        const folderName = folderNameInput.value.trim() || `Playlist_${new Date().toISOString().split('T')[0]}`;
-        const defaultStartTime = Math.round(parseFloat(batchStartTimeInput.value) || 0); // Sin decimales
-        const defaultEndTime = Math.round(parseFloat(batchEndTimeInput.value) || 30); // Sin decimales
-        
-        // Preparar datos para enviar
-        const songs = appState.batchSongs.map(song => ({
-            audio_file_id: song.file_id,
-            artist: song.artist || 'Unknown Artist',
-            title: song.title || 'Unknown Title',
-            start_time: song.start_time >= 0 ? Math.round(song.start_time) : defaultStartTime,
-            end_time: song.end_time > song.start_time ? Math.round(song.end_time) : defaultEndTime,
-            cover_file_id: song.cover_file_id
-        }));
-        
-        // Validar tiempos
-        for (let i = 0; i < songs.length; i++) {
-            const song = songs[i];
-            if (song.end_time <= song.start_time) {
-                throw new Error(`Canción ${i + 1}: El tiempo final debe ser mayor que el tiempo inicial`);
-            }
-            const originalSong = appState.batchSongs[i];
-            if (song.end_time > originalSong.duration) {
-                throw new Error(`Canción ${i + 1}: El tiempo final excede la duración del audio (${formatTime(originalSong.duration)})`);
-            }
-        }
-        
-        // Mostrar progreso
-        batchGenerateBtn.disabled = true;
-        batchGenerateBtn.innerHTML = '<span class="spinner"></span> Generando videos...';
-        batchProgress.style.display = 'block';
-        batchStatus.innerHTML = '';
-        progressBarFill.style.width = '0%';
-        progressText.textContent = 'Iniciando procesamiento...';
-        
-        // Llamar a la API
-        const response = await fetch('/api/batch/generate', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                songs: songs,
-                folder_name: folderName,
-                start_time: defaultStartTime,
-                end_time: defaultEndTime
-            })
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Error generando videos');
-        }
-        
-        const data = await response.json();
-        
-        // Mostrar resultados
-        progressBarFill.style.width = '100%';
-        progressText.textContent = `Completado: ${data.processed}/${data.total} videos generados`;
-        
-        // Mostrar estado de cada canción
-        data.processed_songs.forEach(song => {
-            const statusItem = document.createElement('div');
-            statusItem.className = 'batch-status-item success';
-            statusItem.textContent = `✓ ${song.artist} - ${song.title}`;
-            batchStatus.appendChild(statusItem);
-        });
-        
-        data.errors_list.forEach(error => {
-            const statusItem = document.createElement('div');
-            statusItem.className = 'batch-status-item error';
-            statusItem.textContent = `✗ ${error.artist || 'Unknown'} - ${error.title || 'Unknown'}: ${error.error}`;
-            batchStatus.appendChild(statusItem);
-        });
-        
-        // Mostrar resultados finales
-        batchStep3.style.display = 'none';
-        batchStep4.style.display = 'block';
-        
-        batchResultText.textContent = `Se generaron ${data.processed} de ${data.total} videos exitosamente.`;
-        
-        // Mostrar lista de videos generados
-        batchResults.innerHTML = '';
-        data.processed_songs.forEach(song => {
-            const resultItem = document.createElement('div');
-            resultItem.className = 'batch-result-item';
-            resultItem.innerHTML = `
-                <strong>${song.artist} - ${song.title}</strong><br>
-                <a href="/api/batch/download/${data.folder_name}/${encodeURIComponent(song.filename)}" 
-                   class="btn btn-secondary" style="margin-top: 10px; display: inline-block;">
-                    ⬇️ Descargar
-                </a>
-            `;
-            batchResults.appendChild(resultItem);
-        });
-        
-        // Mostrar botón de descarga ZIP
-        if (data.processed > 0) {
-            batchDownloadZip.href = `/api/batch/download-zip/${data.folder_name}`;
-            batchDownloadZip.download = `${data.folder_name}.zip`;
-            batchDownloadZip.style.display = 'block';
-        }
-        
-        batchGenerateBtn.disabled = false;
-        batchGenerateBtn.innerHTML = '🎬 Generar Todos los Videos';
-        
-    } catch (error) {
-        progressText.textContent = `Error: ${error.message}`;
-        const statusItem = document.createElement('div');
-        statusItem.className = 'batch-status-item error';
-        statusItem.textContent = `Error: ${error.message}`;
-        batchStatus.appendChild(statusItem);
-        batchGenerateBtn.disabled = false;
-        batchGenerateBtn.innerHTML = '🎬 Generar Todos los Videos';
-        console.error(error);
-    }
-}
-
-// Resetear aplicación batch
-function resetBatchApp() {
-    appState.batchSongs = [];
-    batchFilesList.innerHTML = '';
-    batchFilesList.style.display = 'none';
-    batchSongsConfig.innerHTML = '';
-    folderNameInput.value = '';
-    batchStartTimeInput.value = 0;
-    batchEndTimeInput.value = 30;
-    batchProgress.style.display = 'none';
-    batchStatus.innerHTML = '';
-    batchResults.innerHTML = '';
-    batchDownloadZip.style.display = 'none';
-    
-    batchStep2.style.display = 'none';
-    batchStep3.style.display = 'none';
-    batchStep4.style.display = 'none';
-    
-    batchAudioFiles.value = '';
-}
-
-// Cargar y dibujar waveform
-async function loadWaveform(fileId) {
-    try {
-        const response = await fetch(`/api/waveform/${fileId}`);
-        if (!response.ok) {
-            console.error('Error cargando waveform');
-            return;
-        }
-        
-        const data = await response.json();
-        appState.waveform = data.waveform;
-        
-        // Dibujar waveform
+// Resize handler for waveform
+window.addEventListener('resize', () => {
+    if (state.single.peaks.length > 0) {
         drawWaveform();
-        
-        // Actualizar selección inicial (30 segundos desde el inicio por defecto)
-        const defaultStart = 0;
-        const defaultEnd = Math.min(30, appState.audioDuration);
-        updateWaveformSelection(defaultStart, defaultEnd);
-        
-    } catch (error) {
-        console.error('Error cargando waveform:', error);
+        updateSelection();
     }
-}
-
-// Dibujar waveform en el canvas
-function drawWaveform() {
-    if (!appState.waveformCtx || !appState.waveform) {
-        return;
-    }
-    
-    const ctx = appState.waveformCtx;
-    const canvas = appState.waveformCanvas;
-    const width = canvas.width;
-    const height = canvas.height;
-    
-    // Limpiar canvas con fondo negro
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, width, height);
-    
-    // Dibujar waveform con estilo minimalista
-    const waveform = appState.waveform;
-    const barWidth = width / waveform.length;
-    const centerY = height / 2;
-    
-    // Color simple y elegante (blanco/gris)
-    ctx.fillStyle = '#ffffff';
-    
-    waveform.forEach((amplitude, index) => {
-        const x = index * barWidth;
-        const barHeight = amplitude * (height * 0.8);
-        const y = centerY - barHeight / 2;
-        
-        // Opacidad basada en amplitud para efecto más sutil
-        const opacity = Math.min(0.3 + amplitude * 0.7, 1.0);
-        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-        
-        ctx.fillRect(x, y, Math.max(1, barWidth - 1), barHeight);
-    });
-    
-    // Resetear fillStyle
-    ctx.fillStyle = '#ffffff';
-}
-
-// Actualizar selección visual en el waveform
-function updateWaveformSelection(startTime, endTime, updateInputs = true) {
-    if (!waveformSelection || !appState.audioDuration || appState.audioDuration === 0) {
-        return;
-    }
-    
-    const canvas = appState.waveformCanvas;
-    if (!canvas) return;
-    
-    const startPercent = Math.max(0, Math.min(100, (startTime / appState.audioDuration) * 100));
-    const endPercent = Math.max(0, Math.min(100, (endTime / appState.audioDuration) * 100));
-    const selectionWidth = Math.max(0, endPercent - startPercent);
-    
-    waveformSelection.style.left = `${startPercent}%`;
-    waveformSelection.style.width = `${selectionWidth}%`;
-    waveformSelection.style.display = 'block';
-    
-    // Actualizar info de selección
-    const duration = endTime - startTime;
-    if (selectionInfo) {
-        selectionInfo.textContent = `${Math.round(duration)}s`;
-    }
-    
-    // Sincronizar inputs solo si se solicita
-    if (updateInputs) {
-        if (startTimeInput) startTimeInput.value = Math.round(startTime); // Sin decimales
-        if (endTimeInput) endTimeInput.value = Math.round(endTime); // Sin decimales
-        
-        // Actualizar duración visual directamente
-        if (videoDurationSpan) {
-            videoDurationSpan.textContent = formatTime(duration);
-        }
-    }
-}
-
-// Manejar eventos del mouse en el waveform
-function handleWaveformMouseDown(e) {
-    if (!appState.waveform || !appState.audioDuration || !waveformContainer) return;
-    
-    e.preventDefault();
-    const rect = waveformContainer.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percent = Math.max(0, Math.min(100, (x / rect.width) * 100));
-    const time = (percent / 100) * appState.audioDuration;
-    
-    const startTime = Math.round(parseFloat(startTimeInput.value) || 0); // Sin decimales
-    const endTime = Math.round(parseFloat(endTimeInput.value) || 30); // Sin decimales
-    
-    // Determinar qué se está arrastrando
-    const selectionLeftPercent = (startTime / appState.audioDuration) * 100;
-    const selectionRightPercent = (endTime / appState.audioDuration) * 100;
-    const selectionLeft = (selectionLeftPercent / 100) * rect.width;
-    const selectionRight = (selectionRightPercent / 100) * rect.width;
-    const handleWidth = 15;
-    
-    // Verificar si estamos cerca de los handles
-    if (Math.abs(x - selectionLeft) < handleWidth) {
-        appState.isDragging = true;
-        appState.dragType = 'left';
-        e.stopPropagation();
-    } else if (Math.abs(x - selectionRight) < handleWidth) {
-        appState.isDragging = true;
-        appState.dragType = 'right';
-        e.stopPropagation();
-    } else if (x >= selectionLeft && x <= selectionRight) {
-        // Arrastrar toda la selección
-        appState.isDragging = true;
-        appState.dragType = 'selection';
-        appState.dragOffset = time - startTime;
-        e.stopPropagation();
-    } else {
-        // Mover la selección al hacer clic (centrar en el punto clickeado)
-        const duration = endTime - startTime;
-        const newStart = Math.max(0, Math.min(Math.round(time - duration / 2), appState.audioDuration - duration));
-        const newEnd = Math.min(newStart + duration, appState.audioDuration);
-        updateWaveformSelection(newStart, newEnd);
-    }
-}
-
-function handleWaveformMouseMove(e) {
-    if (!appState.isDragging || !appState.waveform || !appState.audioDuration || !waveformContainer) return;
-    
-    e.preventDefault();
-    const rect = waveformContainer.getBoundingClientRect();
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    const percent = (x / rect.width) * 100;
-    const time = Math.max(0, Math.min((percent / 100) * appState.audioDuration, appState.audioDuration));
-    
-    let startTime = Math.round(parseFloat(startTimeInput.value) || 0); // Sin decimales
-    let endTime = Math.round(parseFloat(endTimeInput.value) || 30); // Sin decimales
-    const duration = endTime - startTime;
-    
-    // Si el audio está reproduciendo y cambiamos el fragmento, pausarlo temporalmente
-    if (appState.audioPlayer && !appState.audioPlayer.paused) {
-        appState.audioPlayer.pause();
-        if (playPauseBtn) {
-            playPauseBtn.textContent = '▶️ Reproducir';
-        }
-    }
-    
-    if (appState.dragType === 'left') {
-        startTime = Math.max(0, Math.min(Math.round(time), endTime - 1)); // Mínimo 1 segundo de diferencia
-        updateWaveformSelection(startTime, endTime);
-    } else if (appState.dragType === 'right') {
-        endTime = Math.max(startTime + 1, Math.min(Math.round(time), appState.audioDuration)); // Mínimo 1 segundo de diferencia
-        updateWaveformSelection(startTime, endTime);
-    } else if (appState.dragType === 'selection') {
-        const newStart = Math.max(0, Math.min(Math.round(time - appState.dragOffset), appState.audioDuration - duration));
-        const newEnd = Math.min(newStart + duration, appState.audioDuration);
-        updateWaveformSelection(newStart, newEnd);
-    }
-}
-
-function handleWaveformMouseUp(e) {
-    if (appState.isDragging) {
-        appState.isDragging = false;
-        appState.dragType = null;
-        appState.dragOffset = 0;
-    }
-}
-
-// Configurar reproductor de audio
-function setupAudioPlayer(audioFileId) {
-    console.log('🔍 DEBUG setupAudioPlayer - audioFileId:', audioFileId);
-    
-    // Crear o obtener elemento de audio
-    let audioElement = document.getElementById('audioPlayer');
-    if (!audioElement) {
-        console.log('🔍 DEBUG - Creando nuevo elemento de audio');
-        audioElement = document.createElement('audio');
-        audioElement.id = 'audioPlayer';
-        audioElement.style.display = 'none';
-        document.body.appendChild(audioElement);
-    } else {
-        console.log('🔍 DEBUG - Usando elemento de audio existente');
-        // Remover listeners antiguos para evitar duplicados
-        const newAudioElement = audioElement.cloneNode();
-        audioElement.parentNode.replaceChild(newAudioElement, audioElement);
-        audioElement = newAudioElement;
-    }
-    
-    // Configurar fuente del audio - codificar el nombre del archivo por si tiene caracteres especiales
-    const encodedFileId = encodeURIComponent(audioFileId);
-    const audioUrl = `/api/audio/${encodedFileId}`;
-    console.log('🔍 DEBUG - Configurando audio URL:', audioUrl);
-    audioElement.src = audioUrl;
-    audioElement.preload = 'metadata';
-    
-    // Guardar referencia en el estado
-    appState.audioPlayer = audioElement;
-    
-    // Event listeners para actualizar UI
-    audioElement.addEventListener('loadedmetadata', () => {
-        console.log('✅ DEBUG - Audio metadata cargada, duración:', audioElement.duration);
-        if (totalTimeSpan) {
-            totalTimeSpan.textContent = formatTime(audioElement.duration);
-        }
-    });
-    
-    audioElement.addEventListener('loadeddata', () => {
-        console.log('✅ DEBUG - Audio data cargado');
-    });
-    
-    audioElement.addEventListener('canplay', () => {
-        console.log('✅ DEBUG - Audio puede reproducirse');
-    });
-    
-    audioElement.addEventListener('error', (e) => {
-        console.error('❌ ERROR cargando audio:', e);
-        console.error('Audio src:', audioElement.src);
-        console.error('Audio error code:', audioElement.error?.code);
-        console.error('Audio error message:', audioElement.error?.message);
-        console.error('Audio networkState:', audioElement.networkState);
-        console.error('Audio readyState:', audioElement.readyState);
-        
-        // Mostrar error al usuario
-        if (audioElement.error) {
-            let errorMsg = 'Error desconocido';
-            switch(audioElement.error.code) {
-                case 1: errorMsg = 'MEDIA_ERR_ABORTED - El usuario canceló la carga'; break;
-                case 2: errorMsg = 'MEDIA_ERR_NETWORK - Error de red'; break;
-                case 3: errorMsg = 'MEDIA_ERR_DECODE - Error al decodificar el audio'; break;
-                case 4: errorMsg = 'MEDIA_ERR_SRC_NOT_SUPPORTED - Formato no soportado'; break;
-            }
-            alert(`Error cargando audio: ${errorMsg}\n\nArchivo: ${audioFileId}\nURL: ${audioElement.src}`);
-        }
-    });
-    
-    audioElement.addEventListener('timeupdate', () => {
-        if (currentTimeSpan) {
-            currentTimeSpan.textContent = formatTime(audioElement.currentTime);
-        }
-        
-        // Obtener los tiempos seleccionados (sin decimales)
-        const startTime = Math.round(parseFloat(startTimeInput.value) || 0);
-        const endTime = Math.round(parseFloat(endTimeInput.value) || 30);
-        const currentTime = audioElement.currentTime;
-        
-        // Si el audio alcanza o supera el tiempo final seleccionado, pausar y reiniciar
-        if (currentTime >= endTime) {
-            audioElement.pause();
-            audioElement.currentTime = startTime;
-            if (playPauseBtn) {
-                playPauseBtn.textContent = '▶️ Reproducir';
-            }
-            return; // Salir para evitar conflictos
-        }
-        
-        // Si el audio está antes del tiempo de inicio (solo si está reproduciendo)
-        if (currentTime < startTime && !audioElement.paused) {
-            audioElement.currentTime = startTime;
-        }
-    });
-    
-    audioElement.addEventListener('ended', () => {
-        if (playPauseBtn) {
-            playPauseBtn.textContent = '▶️ Reproducir';
-        }
-        // Reiniciar al inicio de la selección
-        const startTime = Math.round(parseFloat(startTimeInput.value) || 0);
-        audioElement.currentTime = startTime;
-    });
-    
-    audioElement.addEventListener('pause', () => {
-        if (playPauseBtn && !audioElement.ended) {
-            playPauseBtn.textContent = '▶️ Reproducir';
-        }
-    });
-    
-    audioElement.addEventListener('play', () => {
-        if (playPauseBtn) {
-            playPauseBtn.textContent = '⏸️ Pausar';
-        }
-    });
-}
-
-// Toggle reproducción de audio
-function toggleAudioPlayback() {
-    console.log('🔍 DEBUG toggleAudioPlayback - Iniciando');
-    
-    if (!appState.audioPlayer) {
-        console.error('❌ ERROR - Reproductor de audio no está configurado');
-        alert('El reproductor de audio no está configurado. Por favor, sube un archivo de audio primero.');
-        return;
-    }
-    
-    const audio = appState.audioPlayer;
-    const startTime = Math.round(parseFloat(startTimeInput.value) || 0); // Sin decimales
-    const endTime = Math.round(parseFloat(endTimeInput.value) || 30); // Sin decimales
-    
-    console.log('🔍 DEBUG - Tiempos:', { startTime, endTime, currentTime: audio.currentTime });
-    console.log('🔍 DEBUG - Estado audio:', {
-        paused: audio.paused,
-        readyState: audio.readyState,
-        networkState: audio.networkState,
-        src: audio.src,
-        duration: audio.duration
-    });
-    
-    // Validar que los tiempos sean válidos
-    if (endTime <= startTime) {
-        console.warn('❌ Tiempos inválidos: endTime debe ser mayor que startTime');
-        alert(`Tiempos inválidos: El tiempo final (${endTime}s) debe ser mayor que el tiempo inicial (${startTime}s)`);
-        return;
-    }
-    
-    if (audio.paused) {
-        console.log('▶️ Reproduciendo audio...');
-        
-        // Siempre iniciar desde el tiempo de inicio seleccionado
-        audio.currentTime = startTime;
-        console.log('🔍 DEBUG - currentTime establecido a:', startTime);
-        
-        // Intentar reproducir
-        const playPromise = audio.play();
-        
-        if (playPromise !== undefined) {
-            playPromise.then(() => {
-                // Reproducción iniciada correctamente
-                console.log(`✅ Reproduciendo desde ${startTime}s hasta ${endTime}s`);
-            }).catch(error => {
-                console.error('❌ ERROR reproduciendo audio:', error);
-                console.error('Audio src:', audio.src);
-                console.error('Audio file ID:', appState.audioFileId);
-                console.error('Audio readyState:', audio.readyState);
-                console.error('Audio networkState:', audio.networkState);
-                console.error('Audio error:', audio.error);
-                
-                // Mostrar error más específico
-                let errorMsg = error.message || 'Error desconocido';
-                if (audio.error) {
-                    switch(audio.error.code) {
-                        case 1: errorMsg = 'MEDIA_ERR_ABORTED'; break;
-                        case 2: errorMsg = 'MEDIA_ERR_NETWORK - Verifica tu conexión'; break;
-                        case 3: errorMsg = 'MEDIA_ERR_DECODE - Formato no soportado'; break;
-                        case 4: errorMsg = 'MEDIA_ERR_SRC_NOT_SUPPORTED - URL no válida'; break;
-                    }
-                }
-                alert(`Error reproduciendo audio: ${errorMsg}\n\nArchivo: ${appState.audioFileId}\nURL: ${audio.src}\n\nAsegúrate de que el archivo sea válido y que el servidor esté funcionando correctamente.`);
-            });
-        } else {
-            console.warn('⚠️ play() no retornó una promesa');
-        }
-    } else {
-        // Pausar reproducción
-        console.log('⏸️ Pausando audio...');
-        audio.pause();
-    }
-}
-
-// Utilidades de UI
-function showStatus(element, message, type) {
-    element.textContent = message;
-    element.className = `status-message ${type}`;
-    element.style.display = 'block';
-}
-
-function hideStatus(element) {
-    element.style.display = 'none';
-}
+});

@@ -1,4 +1,4 @@
-# 🎵 DigVid - Generador de Videos Musicales para Instagram
+# 🎵 Sonivo - Generador de Videos Musicales para Instagram
 
 Aplicación web para generar videos de música estilo vinilo para Instagram (1080x1350px) con fondo animado, portada girando y metadata del audio.
 
@@ -23,8 +23,8 @@ Aplicación web para generar videos de música estilo vinilo para Instagram (108
 
 1. **Clonar el repositorio**:
 ```bash
-git clone https://github.com/cvegu/DigVid.git
-cd DigVid
+git clone https://github.com/cvegu/Sonivo.git
+cd Sonivo
 ```
 
 2. **Crear entorno virtual**:
@@ -97,7 +97,7 @@ http://localhost:8000
 ## 📁 Estructura del Proyecto
 
 ```
-DigVid/
+Sonivo/
 ├── app/
 │   ├── main.py                    # FastAPI app principal
 │   ├── routes/

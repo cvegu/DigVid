@@ -1,328 +1,213 @@
+"""
+Audio processing service: metadata extraction, waveform generation, segment extraction.
+"""
 import os
-from typing import Optional, Tuple, List
-from mutagen import File
-from mutagen.id3 import ID3NoHeaderError
-from PIL import Image
-import io
-import numpy as np
-try:
-    from moviepy.editor import AudioFileClip
-    MOVIEPY_AVAILABLE = True
-except ImportError:
-    MOVIEPY_AVAILABLE = False
+import json
+import subprocess
+import uuid
+from pathlib import Path
+from typing import Optional
+
+from mutagen.mp3 import MP3
+from mutagen.flac import FLAC
+from mutagen.mp4 import MP4
+from mutagen.oggvorbis import OggVorbis
+from mutagen.id3 import ID3
+from mutagen import File as MutagenFile
 
 
-class AudioProcessor:
-    """Procesador para extraer metadata y portada de archivos de audio."""
-    
-    SUPPORTED_FORMATS = ['.mp3', '.wav', '.flac', '.m4a', '.ogg', '.mp4', '.aac']
-    
-    @staticmethod
-    def is_supported_format(filename: str) -> bool:
-        """Verifica si el formato del archivo es soportado."""
-        ext = os.path.splitext(filename.lower())[1]
-        return ext in AudioProcessor.SUPPORTED_FORMATS
-    
-    @staticmethod
-    def extract_metadata(audio_path: str) -> dict:
-        """
-        Extrae metadata de un archivo de audio.
-        
-        Returns:
-            dict con las siguientes keys:
-            - artist: str o None
-            - title: str o None
-            - duration: float (segundos)
-            - album: str o None
-        """
-        try:
-            audio_file = File(audio_path)
-            if audio_file is None:
-                return {
-                    'artist': None,
-                    'title': None,
-                    'duration': 0.0,
-                    'album': None
-                }
-            
-            # Obtener duración
-            duration = 0.0
-            if hasattr(audio_file, 'info') and hasattr(audio_file.info, 'length'):
-                duration = float(audio_file.info.length)
-            
-            metadata = {
-                'artist': None,
-                'title': None,
-                'duration': duration,
-                'album': None
-            }
-            
-            # Extraer metadata según el tipo de archivo
-            if hasattr(audio_file, 'tags') and audio_file.tags is not None:
-                tags = audio_file.tags
-                
-                # Para MP3 (ID3 tags)
-                # Artist: TPE1 (Lead performer/soloist) o TPE2 (Band/orchestra/accompaniment)
-                if 'TPE1' in tags:
-                    try:
-                        metadata['artist'] = str(tags['TPE1'][0])
-                    except (IndexError, KeyError, TypeError):
-                        pass
-                elif 'TPE2' in tags:
-                    try:
-                        metadata['artist'] = str(tags['TPE2'][0])
-                    except (IndexError, KeyError, TypeError):
-                        pass
-                
-                # Title: TIT2
-                if 'TIT2' in tags:
-                    try:
-                        metadata['title'] = str(tags['TIT2'][0])
-                    except (IndexError, KeyError, TypeError):
-                        pass
-                
-                # Album: TALB
-                if 'TALB' in tags:
-                    try:
-                        metadata['album'] = str(tags['TALB'][0])
-                    except (IndexError, KeyError, TypeError):
-                        pass
-                
-                # Para formatos Vorbis (FLAC, OGG) y otros
-                # Artist
-                if metadata['artist'] is None:
-                    for key in ['ARTIST', 'artist', 'ARTISTS', '©ART']:
-                        if key in tags:
-                            try:
-                                metadata['artist'] = str(tags[key][0])
-                                break
-                            except (IndexError, KeyError, TypeError):
-                                continue
-                
-                # Title
-                if metadata['title'] is None:
-                    for key in ['TITLE', 'title', '©nam', '©NAM']:
-                        if key in tags:
-                            try:
-                                metadata['title'] = str(tags[key][0])
-                                break
-                            except (IndexError, KeyError, TypeError):
-                                continue
-                
-                # Album
-                if metadata['album'] is None:
-                    for key in ['ALBUM', 'album', '©alb', '©ALB']:
-                        if key in tags:
-                            try:
-                                metadata['album'] = str(tags[key][0])
-                                break
-                            except (IndexError, KeyError, TypeError):
-                                continue
-            
-            # Limpiar valores (remover espacios en blanco)
-            if metadata['artist']:
-                metadata['artist'] = metadata['artist'].strip()
-            if metadata['title']:
-                metadata['title'] = metadata['title'].strip()
-            if metadata['album']:
-                metadata['album'] = metadata['album'].strip()
-            
-            return metadata
-            
-        except Exception as e:
-            print(f"Error extrayendo metadata: {e}")
-            import traceback
-            traceback.print_exc()
-            return {
-                'artist': None,
-                'title': None,
-                'duration': 0.0,
-                'album': None
-            }
-    
-    @staticmethod
-    def extract_cover(audio_path: str, output_path: Optional[str] = None) -> Optional[str]:
-        """
-        Extrae la portada del archivo de audio.
-        
-        Args:
-            audio_path: Ruta del archivo de audio
-            output_path: Ruta donde guardar la portada (opcional)
-        
-        Returns:
-            Ruta de la portada extraída o None si no se encuentra
-        """
-        try:
-            audio_file = File(audio_path)
-            if audio_file is None:
-                return None
-            
-            cover_data = None
-            cover_mime = None
-            
-            # Para MP3 con ID3v2 tags
-            if hasattr(audio_file, 'tags') and audio_file.tags is not None:
-                # Buscar APIC (Attached Picture) en ID3v2
-                for tag_key in list(audio_file.tags.keys()):
-                    if 'APIC' in tag_key or tag_key.startswith('APIC:'):
-                        try:
-                            apic = audio_file.tags[tag_key]
-                            if hasattr(apic, 'data'):
-                                cover_data = apic.data
-                                if hasattr(apic, 'mime'):
-                                    cover_mime = apic.mime
-                                break
-                        except (AttributeError, KeyError, IndexError, TypeError) as e:
-                            continue
-                    
-                    # También buscar en tags genéricos
-                    if 'PICTURE' in tag_key.upper() or 'COVER' in tag_key.upper():
-                        try:
-                            pic_tag = audio_file.tags[tag_key]
-                            if hasattr(pic_tag, 'data'):
-                                cover_data = pic_tag.data
-                                break
-                            elif isinstance(pic_tag, list) and len(pic_tag) > 0:
-                                if hasattr(pic_tag[0], 'data'):
-                                    cover_data = pic_tag[0].data
-                                    break
-                        except (AttributeError, KeyError, IndexError, TypeError):
-                            continue
-            
-            # Para formatos Vorbis (FLAC, OGG) - usar pictures
-            if cover_data is None:
-                if hasattr(audio_file, 'pictures') and len(audio_file.pictures) > 0:
-                    try:
-                        # Tomar la primera imagen (generalmente la portada)
-                        picture = audio_file.pictures[0]
-                        if hasattr(picture, 'data'):
-                            cover_data = picture.data
-                            if hasattr(picture, 'mime'):
-                                cover_mime = picture.mime
-                    except (AttributeError, IndexError, TypeError):
-                        pass
-            
-            # Para MP4/M4A - buscar en tags
-            if cover_data is None and hasattr(audio_file, 'tags') and audio_file.tags is not None:
-                # MP4 usa 'covr' tag
-                if 'covr' in audio_file.tags:
-                    try:
-                        covr = audio_file.tags['covr']
-                        if isinstance(covr, list) and len(covr) > 0:
-                            cover_data = covr[0]
-                    except (AttributeError, IndexError, TypeError):
-                        pass
-            
-            if cover_data:
-                try:
-                    # Convertir bytes a imagen
-                    if isinstance(cover_data, bytes):
-                        image = Image.open(io.BytesIO(cover_data))
-                    else:
-                        # Algunos formatos devuelven la imagen directamente
-                        image = cover_data
-                        if not isinstance(image, Image.Image):
-                            image = Image.open(io.BytesIO(image))
-                    
-                    # Convertir a RGB si es necesario
-                    if image.mode in ('RGBA', 'LA', 'P'):
-                        # Crear fondo blanco para imágenes transparentes
-                        rgb_image = Image.new('RGB', image.size, (255, 255, 255))
-                        if image.mode == 'P':
-                            image = image.convert('RGBA')
-                        rgb_image.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
-                        image = rgb_image
-                    elif image.mode != 'RGB':
-                        image = image.convert('RGB')
-                    
-                    # Si no se especifica output_path, crear uno temporal
-                    if output_path is None:
-                        base_name = os.path.splitext(os.path.basename(audio_path))[0]
-                        output_dir = os.path.dirname(audio_path) or '.'
-                        output_path = os.path.join(
-                            output_dir,
-                            f"{base_name}_cover.jpg"
-                        )
-                    
-                    # Asegurar que el directorio existe
-                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                    
-                    # Guardar imagen
-                    image.save(output_path, 'JPEG', quality=95)
-                    return output_path
-                    
-                except Exception as e:
-                    print(f"Error procesando imagen de portada: {e}")
-                    return None
-            
-            return None
-            
-        except Exception as e:
-            print(f"Error extrayendo portada: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
-    
-    @staticmethod
-    def generate_waveform(audio_path: str, width: int = 800, height: int = 200) -> Optional[List[float]]:
-        """
-        Genera datos de waveform para visualización.
-        
-        Args:
-            audio_path: Ruta del archivo de audio
-            width: Ancho del waveform (número de puntos)
-            height: Alto del waveform (no usado actualmente, para futuras mejoras)
-        
-        Returns:
-            Lista de valores de amplitud normalizados (0-1) o None si hay error
-        """
-        if not MOVIEPY_AVAILABLE:
-            print("⚠️ MoviePy no está disponible, no se puede generar waveform")
-            return None
-        
-        try:
-            # Cargar audio
-            audio_clip = AudioFileClip(audio_path)
-            duration = audio_clip.duration
-            
-            # Obtener el array de audio
-            audio_array = audio_clip.to_soundarray()
-            
-            # Si es estéreo, convertir a mono (promedio de ambos canales)
-            if len(audio_array.shape) > 1:
-                audio_array = np.mean(audio_array, axis=1)
-            
-            # Calcular el número de muestras por punto del waveform
-            samples_per_point = max(1, len(audio_array) // width)
-            
-            # Crear array de waveform reducido
-            waveform = []
-            for i in range(width):
-                start_idx = int(i * samples_per_point)
-                end_idx = int(min((i + 1) * samples_per_point, len(audio_array)))
-                
-                if start_idx < len(audio_array):
-                    # Tomar el valor absoluto máximo en este rango
-                    segment = audio_array[start_idx:end_idx]
-                    max_amplitude = np.max(np.abs(segment))
-                    waveform.append(float(max_amplitude))
-                else:
-                    waveform.append(0.0)
-            
-            # Normalizar waveform a rango [0, 1]
-            if len(waveform) > 0:
-                max_val = max(waveform)
-                if max_val > 0:
-                    waveform = [w / max_val for w in waveform]
-            
-            # Cerrar clip
-            audio_clip.close()
-            
-            return waveform
-            
-        except Exception as e:
-            print(f"Error generando waveform: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
+def extract_metadata(filepath: str) -> dict:
+    """
+    Extract metadata (artist, title, album, cover art, duration, bpm) from an audio file.
+    Returns a dict with all available metadata.
+    """
+    filepath = Path(filepath)
+    audio = MutagenFile(str(filepath))
 
+    if audio is None:
+        raise ValueError(f"Could not read audio file: {filepath}")
+
+    metadata = {
+        "artist": "Unknown Artist",
+        "title": filepath.stem,
+        "album": "Unknown Album",
+        "duration": 0,
+        "bpm": None,
+        "cover_path": None,
+    }
+
+    # Duration
+    if audio.info:
+        metadata["duration"] = round(audio.info.length, 2)
+
+    # Extract tags based on file type
+    if isinstance(audio, MP3) or hasattr(audio, 'tags') and audio.tags:
+        tags = audio.tags
+        if tags:
+            _extract_id3_tags(tags, metadata, filepath)
+    elif isinstance(audio, MP4):
+        _extract_mp4_tags(audio, metadata, filepath)
+    elif isinstance(audio, FLAC):
+        _extract_vorbis_tags(audio, metadata, filepath)
+    elif isinstance(audio, OggVorbis):
+        _extract_vorbis_tags(audio, metadata, filepath)
+
+    return metadata
+
+
+def _extract_id3_tags(tags, metadata: dict, filepath: Path):
+    """Extract metadata from ID3 tags (MP3)."""
+    # Artist
+    if "TPE1" in tags:
+        metadata["artist"] = str(tags["TPE1"])
+    elif "TPE2" in tags:
+        metadata["artist"] = str(tags["TPE2"])
+
+    # Title
+    if "TIT2" in tags:
+        metadata["title"] = str(tags["TIT2"])
+
+    # Album
+    if "TALB" in tags:
+        metadata["album"] = str(tags["TALB"])
+
+    # BPM
+    if "TBPM" in tags:
+        try:
+            metadata["bpm"] = int(str(tags["TBPM"]))
+        except (ValueError, TypeError):
+            pass
+
+    # Cover art
+    for key in tags.keys():
+        if key.startswith("APIC"):
+            apic = tags[key]
+            ext = "jpg" if "jpeg" in apic.mime else "png"
+            cover_filename = f"{filepath.stem}_cover.{ext}"
+            cover_dir = filepath.parent
+            cover_path = cover_dir / cover_filename
+            with open(cover_path, "wb") as f:
+                f.write(apic.data)
+            metadata["cover_path"] = str(cover_path)
+            break
+
+
+def _extract_mp4_tags(audio: MP4, metadata: dict, filepath: Path):
+    """Extract metadata from MP4/M4A tags."""
+    tags = audio.tags
+    if not tags:
+        return
+
+    if "\xa9ART" in tags:
+        metadata["artist"] = tags["\xa9ART"][0]
+    if "\xa9nam" in tags:
+        metadata["title"] = tags["\xa9nam"][0]
+    if "\xa9alb" in tags:
+        metadata["album"] = tags["\xa9alb"][0]
+    if "tmpo" in tags:
+        metadata["bpm"] = int(tags["tmpo"][0])
+
+    # Cover art
+    if "covr" in tags and tags["covr"]:
+        cover_data = bytes(tags["covr"][0])
+        cover_filename = f"{filepath.stem}_cover.jpg"
+        cover_path = filepath.parent / cover_filename
+        with open(cover_path, "wb") as f:
+            f.write(cover_data)
+        metadata["cover_path"] = str(cover_path)
+
+
+def _extract_vorbis_tags(audio, metadata: dict, filepath: Path):
+    """Extract metadata from Vorbis comments (FLAC, OGG)."""
+    if "artist" in audio:
+        metadata["artist"] = audio["artist"][0]
+    if "title" in audio:
+        metadata["title"] = audio["title"][0]
+    if "album" in audio:
+        metadata["album"] = audio["album"][0]
+    if "bpm" in audio:
+        try:
+            metadata["bpm"] = int(audio["bpm"][0])
+        except (ValueError, TypeError):
+            pass
+
+    # Cover art for FLAC
+    if isinstance(audio, FLAC) and audio.pictures:
+        pic = audio.pictures[0]
+        ext = "jpg" if "jpeg" in pic.mime else "png"
+        cover_filename = f"{filepath.stem}_cover.{ext}"
+        cover_path = filepath.parent / cover_filename
+        with open(cover_path, "wb") as f:
+            f.write(pic.data)
+        metadata["cover_path"] = str(cover_path)
+
+
+def generate_waveform_peaks(filepath: str, num_points: int = 800) -> list:
+    """
+    Generate waveform peak data using FFmpeg.
+    Returns a list of normalized peak values (0.0 to 1.0) for rendering in canvas.
+    """
+    try:
+        # Use FFmpeg to get raw PCM data
+        cmd = [
+            "ffmpeg", "-i", str(filepath),
+            "-ac", "1",           # Mono
+            "-ar", "8000",        # Low sample rate for speed
+            "-f", "f32le",        # 32-bit float little-endian
+            "-vn",                # No video
+            "pipe:1"
+        ]
+        result = subprocess.run(
+            cmd, capture_output=True, timeout=30
+        )
+
+        if result.returncode != 0:
+            return [0.5] * num_points
+
+        import numpy as np
+        samples = np.frombuffer(result.stdout, dtype=np.float32)
+
+        if len(samples) == 0:
+            return [0.5] * num_points
+
+        # Chunk samples into num_points groups
+        chunk_size = max(1, len(samples) // num_points)
+        peaks = []
+        for i in range(num_points):
+            start = i * chunk_size
+            end = min(start + chunk_size, len(samples))
+            if start >= len(samples):
+                peaks.append(0.0)
+            else:
+                chunk = samples[start:end]
+                peak = float(np.max(np.abs(chunk)))
+                peaks.append(min(peak, 1.0))
+
+        # Normalize to 0-1 range
+        max_peak = max(peaks) if peaks else 1.0
+        if max_peak > 0:
+            peaks = [p / max_peak for p in peaks]
+
+        return peaks
+
+    except Exception as e:
+        print(f"Error generating waveform: {e}")
+        return [0.5] * num_points
+
+
+def extract_audio_segment(filepath: str, start_sec: float, end_sec: float, output_path: str) -> str:
+    """
+    Extract a segment of audio using FFmpeg.
+    Returns the output file path.
+    """
+    duration = end_sec - start_sec
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(filepath),
+        "-ss", str(start_sec),
+        "-t", str(duration),
+        "-acodec", "copy",
+        str(output_path)
+    ]
+    subprocess.run(cmd, capture_output=True, check=True, timeout=30)
+    return output_path

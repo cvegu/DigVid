@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-02-19T02:16:47.076644+00:00",
+  "label": "run_3",
+  "audio_duration_seconds": 300.0,
+  "segment_duration_seconds": 300.0,
+  "total_job_time_seconds": 219.698,
+  "cpu_user_time_seconds": 575.025,
+  "cpu_system_time_seconds": 220.292,
+  "avg_cpu_percent": 38.6,
+  "peak_memory_mb": 964.9,
+  "avg_memory_mb": 620.2,
+  "disk_read_mb": 0.0,
+  "disk_write_mb": 0.0,
+  "output_video_size_mb": 296.24,
+  "ffmpeg_cmdline": "ffmpeg -y -f rawvideo -vcodec rawvideo -pix_fmt rgb24 -s 1080x1080 -r 30 -i pipe:0 -ss 0 -t 300.0 -i /Users/cristianvega/Documents/REPOS/DigVid/benchmarks/fixtures/sine_300s.wav -c:v libx264 -preset medium -crf 20 -profile:v high -level:v 4.0 -pix_fmt yuv420p -c:a aac -b:a 256k -ar 48000 -shortest -movflags +faststart /Users/cristianvega/Documents/REPOS/DigVid/outputs/bench_300s_run_3.mp4",
+  "exit_code": 0,
+  "samples_collected": 786,
+  "gpu": "not available"
+}
